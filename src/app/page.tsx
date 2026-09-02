@@ -1,69 +1,147 @@
-import Image from "next/image";
+import Link from 'next/link'
+import { AlertTriangle, Smartphone } from 'lucide-react'
+import { TrainingCalendar } from '@/components/calendar/training-calendar'
+import { CalendarLegend } from '@/components/calendar/calendar-legend'
+import { RestDayView } from '@/components/dashboard/rest-day-view'
+import { StatsCards } from '@/components/dashboard/stats-cards'
+import { TodayCard } from '@/components/dashboard/today-card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { buildCalendarMonth } from '@/lib/calendar-build'
+import { getCycleDay, getNextWorkoutDate, isWorkoutDay } from '@/lib/cycle'
+import { shouldSuggestMaxTest } from '@/lib/db/max-tests'
+import { getAllSkippedDates } from '@/lib/db/skipped-days'
+import { getAllSessions, getSessionByDate, getLatestSessionsByType, parseSets } from '@/lib/db/sessions'
+import { getSettings } from '@/lib/db/settings'
+import type { ExerciseVariant } from '@/lib/workouts'
+import { EXERCISE_VARIANTS } from '@/lib/workouts'
+import { getMobileUrl } from '@/lib/mobile-url'
+import { formatDateLocal, formatShortDate } from '@/lib/utils'
 
-export default function Home() {
+export const dynamic = 'force-dynamic'
+
+export default async function HomePage() {
+  const today = formatDateLocal(new Date())
+  const now = new Date()
+  const appSettings = await getSettings()
+  const variant = appSettings.currentVariant as ExerciseVariant
+  const cycleOffset = appSettings.cycleOffset ?? 0
+  const cycleDay = getCycleDay(appSettings.startDate, today, cycleOffset)
+  const todaySession = isWorkoutDay(cycleDay)
+    ? await getSessionByDate(today)
+    : null
+  const latest = await getLatestSessionsByType(variant)
+  const suggestMaxTest = await shouldSuggestMaxTest(variant)
+
+  const allSessions = await getAllSessions(variant)
+  const skippedDates = await getAllSkippedDates()
+
+  const sessionsByDate: Record<string, { totalReps: number; type: string; completedAt: string | null }> = {}
+  for (const s of allSessions) {
+    sessionsByDate[s.date] = {
+      totalReps: s.totalReps,
+      type: s.type,
+      completedAt: s.completedAt,
+    }
+  }
+
+  const sessionsMap = new Map(
+    allSessions.map((s) => [
+      s.date,
+      { totalReps: s.totalReps, type: s.type, completedAt: s.completedAt },
+    ]),
+  )
+  const skippedSet = new Set(skippedDates)
+
+  const initialMonth = buildCalendarMonth({
+    year: now.getFullYear(),
+    month: now.getMonth(),
+    startDate: appSettings.startDate,
+    cycleOffset,
+    today,
+    sessions: sessionsMap,
+    skippedSet,
+  })
+
+  const stats = (['A', 'B', 'C'] as const).map((type) => {
+    const session = latest[type]
+    return {
+      type,
+      totalReps: session?.totalReps ?? null,
+      sets: session ? parseSets(session.sets).map((s) => s.reps) : null,
+      date: session ? formatShortDate(session.date) : null,
+    }
+  })
+
+  const nextWorkoutDate = getNextWorkoutDate(appSettings.startDate, today, cycleOffset)
+  const nextWorkoutDay = getCycleDay(appSettings.startDate, nextWorkoutDate, cycleOffset)
+  const mobileUrl = getMobileUrl()
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="flex flex-col gap-6 px-4 py-6">
+      <Link
+        href={mobileUrl ?? '/settings'}
+        className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary"
+      >
+        <Smartphone className="h-4 w-4 shrink-0 text-amber-400" aria-hidden="true" />
+        <span className="truncate">
+          {mobileUrl ? `Мобільний доступ: ${mobileUrl}` : 'Налаштувати мобільний доступ'}
+        </span>
+      </Link>
+
+      <header className="flex flex-col gap-1">
+        <p className="text-sm text-muted-foreground">Push-up Tracker</p>
+        <h1 className="text-2xl font-bold">Сьогодні</h1>
+        <p className="text-sm text-muted-foreground">
+          {EXERCISE_VARIANTS[variant]}
+        </p>
+      </header>
+
+      {suggestMaxTest && (
+        <Link
+          href="/settings"
+          className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200 transition-colors hover:bg-amber-500/15"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Минуло 6+ тижнів від останнього max test. Час перевірити максимум.</span>
+        </Link>
+      )}
+
+      {isWorkoutDay(cycleDay) ? (
+        <TodayCard
+          date={today}
+          type={cycleDay}
+          completed={!!todaySession?.completedAt}
+          totalReps={todaySession?.totalReps}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+      ) : (
+        <RestDayView
+          date={today}
+          nextWorkoutDate={formatShortDate(nextWorkoutDate)}
+          nextWorkoutType={isWorkoutDay(nextWorkoutDay) ? nextWorkoutDay : 'A'}
+        />
+      )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Календар</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrainingCalendar
+            initialMonth={initialMonth}
+            sessionsByDate={sessionsByDate}
+            skippedDates={skippedDates}
+            compact
+          />
+          <div className="mt-4">
+            <CalendarLegend />
+          </div>
+        </CardContent>
+      </Card>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Останні total reps</h2>
+        <StatsCards stats={stats} />
+      </section>
+    </main>
+  )
 }

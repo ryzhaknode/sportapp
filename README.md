@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Push-up Tracker
 
-## Getting Started
+Персональний трекер прогресу віджимань за стратегією A/B/C через день.
 
-First, run the development server:
+## Локально (Docker)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose up --build
+# → http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Дані: `./data/workouts.db`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Локальна розробка
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+## Мобільний доступ (Wi‑Fi)
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run mobile:url
+docker compose up --build -d
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Відкрий URL з `.env` на телефоні в тій самій мережі.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Деплой в інтернет (без Docker / Wi‑Fi)
 
-## Deploy on Vercel
+**Vercel + SQLite напряму не підходить** — файлова БД на serverless не зберігається між запитами.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Платформа | Підходить? | Чому |
+|-----------|------------|------|
+| **Railway / Render / Fly.io** | Так | Docker + persistent volume або Node + диск |
+| **Vercel + Turso** | Так | Cloud SQLite (потрібна міграція БД) |
+| **Vercel як зараз** | Ні | `better-sqlite3` + `./data/` не персистить |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Рекомендація: Railway (найпростіше)
+
+1. Push репозиторій на GitHub
+2. [railway.app](https://railway.app) → New Project → Deploy from GitHub
+3. Додай **Volume** mount на `/app/data`
+4. Env: `DATABASE_URL=file:/app/data/workouts.db`
+5. Отримаєш URL типу `https://sportapp-production.up.railway.app` — працює з телефону через інтернет
+
+### Альтернатива: Vercel + Turso
+
+Потрібна заміна `better-sqlite3` на `@libsql/client` + Turso DB (безкоштовний tier). Це окремий крок міграції.
+
+## Перший запуск
+
+1. **Налаштування** — дата старту циклу
+2. **Головна** — сьогоднішній тип A / B / C / rest
+3. **Тренування** — reps, таймер, skip rest
+4. **Гід** — як влаштована програма
+
+## Цикл
+
+```
+A → Rest → B → Rest → C → Rest → A → ...
+```
+
+Головна метрика — **total reps**.
+
+## Резервна копія
+
+**Налаштування → Експорт JSON**

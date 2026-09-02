@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: file:/app/data/workouts.db
+      MOBILE_URL: ${MOBILE_URL}
+      NEXT_PUBLIC_MOBILE_URL: ${NEXT_PUBLIC_MOBILE_URL}
+    restart: unless-stopped
