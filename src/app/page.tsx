@@ -1,3 +1,4 @@
+import { PageMain } from '@/components/layout/page-main'
 import { HomeWorkoutSection } from '@/components/home/home-workout-section'
 import { StaleSessionBanner } from '@/components/home/stale-session-banner'
 import { getSettings } from '@/lib/db/settings'
@@ -60,10 +61,10 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   const initialFromUrl = isWorkoutCode(workoutStr) ? workoutStr : undefined
 
   return (
-    <main className="flex flex-col gap-6 px-4 py-6 pb-24">
+    <PageMain>
       <header className="flex flex-col gap-1">
         <p className="text-sm text-muted-foreground">Трекер гіпертрофії</p>
-        <h1 className="text-2xl font-bold">Головна</h1>
+        <h1 className="text-[1.625rem] font-bold leading-tight">Головна</h1>
         <p className="text-sm text-muted-foreground">{formatDisplayDate(today)}</p>
       </header>
 
@@ -105,6 +106,6 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
           initialCode={initialFromUrl}
         />
       )}
-    </main>
+    </PageMain>
   )
 }

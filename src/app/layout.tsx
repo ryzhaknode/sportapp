@@ -40,7 +40,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="uk" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="min-h-full bg-background antialiased">
-        <div className="mx-auto min-h-full max-w-lg pb-24">
+        <div className="app-shell mx-auto max-w-lg">
           <OfflineShell>{children}</OfflineShell>
         </div>
         <Nav />

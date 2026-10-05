@@ -1,3 +1,4 @@
+import { PageMain } from '@/components/layout/page-main'
 import { ProgramEditor } from '@/components/program/program-editor'
 import { getAllTemplates } from '@/lib/db/program'
 import { DELOAD_WEEKS, EXTRA_SET_WEEKS } from '@/lib/program/week-cycle'
@@ -9,9 +10,9 @@ export default async function ProgramPage() {
   const templates = await getAllTemplates()
 
   return (
-    <main className="flex flex-col gap-6 px-4 py-6 pb-24">
+    <PageMain>
       <header>
-        <h1 className="text-2xl font-bold">Програма</h1>
+        <h1 className="text-[1.625rem] font-bold leading-tight">Програма</h1>
         <p className="text-sm text-muted-foreground">{PROGRAM_NAME}</p>
       </header>
 
@@ -23,6 +24,6 @@ export default async function ProgramPage() {
       </section>
 
       <ProgramEditor templates={templates} />
-    </main>
+    </PageMain>
   )
 }

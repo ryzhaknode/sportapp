@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PageMain } from '@/components/layout/page-main'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { exerciseSlots, exercises, workoutSessions, workoutTemplates } from '@/lib/db/schema'
@@ -38,9 +39,9 @@ export default async function HistoryPage() {
   }
 
   return (
-    <main className="flex flex-col gap-4 px-4 py-6 pb-24">
+    <PageMain className="gap-4">
       <header>
-        <h1 className="text-2xl font-bold">Історія</h1>
+        <h1 className="text-[1.625rem] font-bold leading-tight">Історія</h1>
         <p className="text-sm text-muted-foreground">Завершені тренування</p>
       </header>
 
@@ -102,6 +103,6 @@ export default async function HistoryPage() {
           ))}
         </ul>
       </section>
-    </main>
+    </PageMain>
   )
 }

@@ -26,11 +26,14 @@ export const AddWeightForm = () => {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      <p className="text-sm font-medium">Додати запис</p>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="weightDate" className="text-xs">
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4"
+    >
+      <p className="text-sm font-semibold">Додати запис</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="weightDate" className="text-xs text-muted-foreground">
             Дата
           </Label>
           <Input
@@ -38,11 +41,11 @@ export const AddWeightForm = () => {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="h-11"
+            className="touch-target h-12 w-full min-w-0 text-base"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="weightKg" className="text-xs">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="weightKg" className="text-xs text-muted-foreground">
             Вага, кг
           </Label>
           <Input
@@ -50,14 +53,15 @@ export const AddWeightForm = () => {
             type="number"
             inputMode="decimal"
             step="0.1"
+            placeholder="напр. 82.5"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            className="h-11"
+            className="touch-target h-12 w-full text-center text-lg tabular-nums"
             required
           />
         </div>
       </div>
-      <Button type="submit" disabled={pending} variant="secondary" className="touch-target h-11">
+      <Button type="submit" disabled={pending} className="touch-target h-14 w-full text-base">
         Зберегти
       </Button>
     </form>

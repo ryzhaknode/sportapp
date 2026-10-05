@@ -1,3 +1,4 @@
+import { PageMain } from '@/components/layout/page-main'
 import { MobileAccessCard } from '@/components/settings/mobile-access-card'
 import { SettingsForm } from '@/components/settings/settings-form'
 import { getSettings } from '@/lib/db/settings'
@@ -10,7 +11,7 @@ export default async function SettingsPage() {
   const mobileUrl = getMobileUrl()
 
   return (
-    <main className="flex min-w-0 flex-col gap-6 overflow-x-hidden px-4 py-6">
+    <PageMain className="min-w-0 overflow-x-hidden">
       <MobileAccessCard mobileUrl={mobileUrl} />
 
       <header>
@@ -25,6 +26,6 @@ export default async function SettingsPage() {
         timerSoundEnabled={appSettings.timerSoundEnabled}
         timerVibrationEnabled={appSettings.timerVibrationEnabled}
       />
-    </main>
+    </PageMain>
   )
 }
