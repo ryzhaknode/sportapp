@@ -2,73 +2,48 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Plus } from 'lucide-react'
-import {
-  addMaxTestAction,
-  exportDataAction,
-  updateSettingsAction,
-} from '@/app/actions/settings'
+import { Download } from 'lucide-react'
+import { exportCsvAction, exportDataAction, updateSettingsAction } from '@/app/actions/settings'
+import { requestNotificationPermission } from '@/lib/timer-feedback'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { EXERCISE_VARIANTS, type ExerciseVariant } from '@/lib/workouts'
-import { formatShortDate } from '@/lib/utils'
-
-interface MaxTestItem {
-  id: number
-  maxReps: number
-  testedAt: string
-  notes: string | null
-}
 
 interface SettingsFormProps {
-  startDate: string
-  currentVariant: ExerciseVariant
-  baselineMax: number
-  maxTests: MaxTestItem[]
+  programStartDate: string
+  tournamentWeekEnabled: boolean
+  matchDate: string | null
+  timerSoundEnabled: boolean
+  timerVibrationEnabled: boolean
 }
 
 export const SettingsForm = ({
-  startDate,
-  currentVariant,
-  baselineMax,
-  maxTests,
+  programStartDate,
+  tournamentWeekEnabled,
+  matchDate,
+  timerSoundEnabled,
+  timerVibrationEnabled,
 }: SettingsFormProps) => {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [form, setForm] = useState({
-    startDate,
-    currentVariant,
-    baselineMax: String(baselineMax),
-  })
-  const [maxForm, setMaxForm] = useState({
-    maxReps: '',
-    testedAt: new Date().toISOString().slice(0, 10),
-    notes: '',
+    programStartDate,
+    tournamentWeekEnabled,
+    matchDate: matchDate ?? '',
+    timerSoundEnabled,
+    timerVibrationEnabled,
   })
 
   const handleSaveSettings = () => {
     startTransition(async () => {
       await updateSettingsAction({
-        startDate: form.startDate,
-        currentVariant: form.currentVariant as ExerciseVariant,
-        baselineMax: Number(form.baselineMax),
+        programStartDate: form.programStartDate,
+        tournamentWeekEnabled: form.tournamentWeekEnabled,
+        matchDate: form.matchDate || null,
+        timerSoundEnabled: form.timerSoundEnabled,
+        timerVibrationEnabled: form.timerVibrationEnabled,
       })
-      router.refresh()
-    })
-  }
-
-  const handleAddMaxTest = () => {
-    if (!maxForm.maxReps) return
-    startTransition(async () => {
-      await addMaxTestAction({
-        variant: form.currentVariant as ExerciseVariant,
-        maxReps: Number(maxForm.maxReps),
-        testedAt: maxForm.testedAt,
-        notes: maxForm.notes || undefined,
-      })
-      setMaxForm({ maxReps: '', testedAt: new Date().toISOString().slice(0, 10), notes: '' })
       router.refresh()
     })
   }
@@ -79,58 +54,63 @@ export const SettingsForm = ({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `sportapp-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `gym-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
 
+  const handleExportCsv = async () => {
+    const csv = await exportCsvAction()
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `gym-sessions-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleNotifications = async () => {
+    await requestNotificationPermission()
+  }
+
   return (
-    <div className="flex min-w-0 flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6 pb-24">
       <Card>
         <CardHeader>
-          <CardTitle>Цикл тренувань</CardTitle>
+          <CardTitle>Програма</CardTitle>
         </CardHeader>
-        <CardContent className="flex min-w-0 flex-col gap-4 overflow-hidden">
-          <div className="flex min-w-0 flex-col gap-2">
-            <Label htmlFor="startDate">Дата старту циклу</Label>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="programStartDate">Дата старту 13-тижневого циклу</Label>
             <Input
-              id="startDate"
+              id="programStartDate"
               type="date"
-              value={form.startDate}
-              onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+              value={form.programStartDate}
+              onChange={(e) => setForm((f) => ({ ...f, programStartDate: e.target.value }))}
             />
           </div>
-
           <div className="flex flex-col gap-2">
-            <Label htmlFor="variant">Варіант вправи</Label>
-            <select
-              id="variant"
-              value={form.currentVariant}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, currentVariant: e.target.value as ExerciseVariant }))
-              }
-              className="flex h-11 w-full rounded-xl border border-border bg-background px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {Object.entries(EXERCISE_VARIANTS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="baselineMax">Baseline max (0 RIR)</Label>
+            <Label htmlFor="matchDate">Дата важливого матчу (опційно)</Label>
             <Input
-              id="baselineMax"
-              type="number"
-              min={1}
-              value={form.baselineMax}
-              onChange={(e) => setForm((f) => ({ ...f, baselineMax: e.target.value }))}
+              id="matchDate"
+              type="date"
+              value={form.matchDate}
+              onChange={(e) => setForm((f) => ({ ...f, matchDate: e.target.value }))}
             />
           </div>
-
-          <Button onClick={handleSaveSettings} disabled={pending}>
+          <label className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.tournamentWeekEnabled}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, tournamentWeekEnabled: e.target.checked }))
+              }
+              className="h-5 w-5 rounded border-border"
+            />
+            Турнірний тиждень (2 підходи, запас 2–3)
+          </label>
+          <Button onClick={handleSaveSettings} disabled={pending} className="touch-target h-12">
             Зберегти
           </Button>
         </CardContent>
@@ -138,48 +118,35 @@ export const SettingsForm = ({
 
       <Card>
         <CardHeader>
-          <CardTitle>Тест максимуму</CardTitle>
+          <CardTitle>Таймер</CardTitle>
         </CardHeader>
-        <CardContent className="flex min-w-0 flex-col gap-4 overflow-hidden">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex min-w-0 flex-col gap-2">
-              <Label htmlFor="maxReps">Max reps</Label>
-              <Input
-                id="maxReps"
-                type="number"
-                min={1}
-                value={maxForm.maxReps}
-                onChange={(e) => setMaxForm((f) => ({ ...f, maxReps: e.target.value }))}
-              />
-            </div>
-            <div className="flex min-w-0 flex-col gap-2">
-              <Label htmlFor="testedAt">Дата</Label>
-              <Input
-                id="testedAt"
-                type="date"
-                value={maxForm.testedAt}
-                onChange={(e) => setMaxForm((f) => ({ ...f, testedAt: e.target.value }))}
-              />
-            </div>
-          </div>
-          <Button variant="secondary" onClick={handleAddMaxTest} disabled={pending || !maxForm.maxReps}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Додати запис
+        <CardContent className="flex flex-col gap-3">
+          <label className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.timerSoundEnabled}
+              onChange={(e) => setForm((f) => ({ ...f, timerSoundEnabled: e.target.checked }))}
+              className="h-5 w-5"
+            />
+            Звук наприкінці відпочинку
+          </label>
+          <label className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.timerVibrationEnabled}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, timerVibrationEnabled: e.target.checked }))
+              }
+              className="h-5 w-5"
+            />
+            Вібрація
+          </label>
+          <Button type="button" variant="secondary" className="touch-target h-12" onClick={handleNotifications}>
+            Дозволити сповіщення
           </Button>
-
-          {maxTests.length > 0 && (
-            <ul className="flex flex-col gap-2">
-              {maxTests.map((test) => (
-                <li
-                  key={test.id}
-                  className="flex items-center justify-between rounded-xl bg-secondary px-4 py-3 text-sm"
-                >
-                  <span>{formatShortDate(test.testedAt)}</span>
-                  <span className="font-semibold">{test.maxReps} reps</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Button onClick={handleSaveSettings} disabled={pending} variant="outline">
+            Зберегти таймер
+          </Button>
         </CardContent>
       </Card>
 
@@ -187,10 +154,13 @@ export const SettingsForm = ({
         <CardHeader>
           <CardTitle>Резервна копія</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={handleExport} className="w-full">
+        <CardContent className="flex flex-col gap-2">
+          <Button variant="outline" onClick={handleExport} className="touch-target h-12 w-full">
             <Download className="h-4 w-4" aria-hidden="true" />
             Експорт JSON
+          </Button>
+          <Button variant="outline" onClick={handleExportCsv} className="touch-target h-12 w-full">
+            Експорт історії CSV
           </Button>
         </CardContent>
       </Card>

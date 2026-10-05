@@ -1,69 +1,57 @@
-# Push-up Tracker
+# Gym ABC Tracker
 
-Персональний трекер прогресу віджимань за стратегією A/B/C через день.
+Мобільний (browser-first) трекер гіпертрофії: тренування A/B/C (Пн/Ср/Пт), подвійна прогресія ваги/повторів, 13-тижневий цикл.
 
-## Локально (Docker)
-
-```bash
-docker compose up --build
-# → http://localhost:3000
-```
-
-Дані: `./data/workouts.db`
-
-## Локальна розробка
+## Локально
 
 ```bash
 npm install
+cp .env.example .env   # опційно; без Turso — file:./data/workouts.db
 npm run dev
+# → http://localhost:3000
 ```
 
-## Мобільний доступ (Wi‑Fi)
+База: **файл** `./data/workouts.db` або **Turso** (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` у `.env`).
+
+## Vercel + Turso (зал по LTE, Mac не потрібен)
+
+Покрокова інструкція: **[docs/deploy-turso-vercel.md](docs/deploy-turso-vercel.md)**  
+Build на Vercel: `npm run build:vercel`.
+
+## Телефон у залі
+
+### Локальна Wi‑Fi (Mac у тій же мережі)
 
 ```bash
 npm run mobile:url
 docker compose up --build -d
 ```
 
-Відкрий URL з `.env` на телефоні в тій самій мережі.
+Відкрий URL з `.env` у браузері телефону. Додай на домашній екран (PWA).
 
-## Деплой в інтернет (без Docker / Wi‑Fi)
+### LTE / мобільний інternet (Mac вдома увімкнений)
 
-**Vercel + SQLite напряму не підходить** — файлова БД на serverless не зберігається між запитами.
+**Vercel + база на Mac напряму не працює** — Vercel не бачить твій `workouts.db`. Безкоштовна альтернатива без VPS: **[Cloudflare Tunnel](docs/mobile-from-anywhere.md)**:
 
-| Платформа | Підходить? | Чому |
-|-----------|------------|------|
-| **Railway / Render / Fly.io** | Так | Docker + persistent volume або Node + диск |
-| **Vercel + Turso** | Так | Cloud SQLite (потрібна міграція БД) |
-| **Vercel як зараз** | Ні | `better-sqlite3` + `./data/` не персистить |
-
-### Рекомендація: Railway (найпростіше)
-
-1. Push репозиторій на GitHub
-2. [railway.app](https://railway.app) → New Project → Deploy from GitHub
-3. Додай **Volume** mount на `/app/data`
-4. Env: `DATABASE_URL=file:/app/data/workouts.db`
-5. Отримаєш URL типу `https://sportapp-production.up.railway.app` — працює з телефону через інтернет
-
-### Альтернатива: Vercel + Turso
-
-Потрібна заміна `better-sqlite3` на `@libsql/client` + Turso DB (безкоштовний tier). Це окремий крок міграції.
-
-## Перший запуск
-
-1. **Налаштування** — дата старту циклу
-2. **Головна** — сьогоднішній тип A / B / C / rest
-3. **Тренування** — reps, таймер, skip rest
-4. **Гід** — як влаштована програма
-
-## Цикл
-
-```
-A → Rest → B → Rest → C → Rest → A → ...
+```bash
+# .env: CLOUDFLARE_TUNNEL_TOKEN=...
+docker compose --profile tunnel up --build -d
 ```
 
-Головна метрика — **total reps**.
+Відкривай **HTTPS URL з Cloudflare** на телефоні — повний додаток онлайн, база лишається на Mac.
 
-## Резервна копія
+**Зал без Mac взагалі:** офлайн PWA (`/offline`) — тренування на телефоні, sync вдома. Деталі: [docs/mobile-from-anywhere.md](docs/mobile-from-anywhere.md).
 
-**Налаштування → Експорт JSON**
+## Тести
+
+```bash
+npm test
+```
+
+## Маршрути
+
+- **/** — наступне тренування, бейджі прогресії
+- **/workout/[id]** — активна сесія, підходи, таймер
+- **/history** — історія та графіки вправ
+- **/program** — шаблон A/B/C, редагування
+- **/settings** — цикл, таймер, експорт JSON/CSV

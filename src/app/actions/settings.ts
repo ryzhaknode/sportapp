@@ -1,54 +1,58 @@
 'use server'
 
-import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
-import { getSettings } from '@/lib/db/settings'
-import { getAllSessions } from '@/lib/db/sessions'
-import { addMaxTest, getMaxTests } from '@/lib/db/max-tests'
-import { settings } from '@/lib/db/schema'
-import type { ExerciseVariant } from '@/lib/workouts'
+import { updateSettings } from '@/lib/db/settings'
+import {
+  bodyWeightLogs,
+  exerciseLogs,
+  exerciseSlots,
+  exercises,
+  progressionState,
+  programs,
+  setLogs,
+  workoutSessions,
+  workoutTemplates,
+} from '@/lib/db/schema'
 
 export const updateSettingsAction = async (input: {
-  startDate: string
-  currentVariant: ExerciseVariant
-  baselineMax: number
+  programStartDate: string
+  tournamentWeekEnabled: boolean
+  matchDate: string | null
+  timerSoundEnabled: boolean
+  timerVibrationEnabled: boolean
 }) => {
-  const db = getDb()
-  await db
-    .update(settings)
-    .set({
-      startDate: input.startDate,
-      currentVariant: input.currentVariant,
-      baselineMax: input.baselineMax,
-    })
-    .where(eq(settings.id, 1))
-
-  revalidatePath('/')
-  revalidatePath('/workout')
-  revalidatePath('/settings')
-}
-
-export const addMaxTestAction = async (input: {
-  variant: ExerciseVariant
-  maxReps: number
-  testedAt: string
-  notes?: string
-}) => {
-  await addMaxTest(input)
+  await updateSettings(input)
   revalidatePath('/')
   revalidatePath('/settings')
+  revalidatePath('/program')
 }
 
 export const exportDataAction = async () => {
-  const appSettings = await getSettings()
-  const sessions = await getAllSessions()
-  const tests = await getMaxTests()
-
+  const db = getDb()
   return {
     exportedAt: new Date().toISOString(),
-    settings: appSettings,
-    sessions,
-    maxTests: tests,
+    programs: await db.select().from(programs),
+    exercises: await db.select().from(exercises),
+    workoutTemplates: await db.select().from(workoutTemplates),
+    exerciseSlots: await db.select().from(exerciseSlots),
+    workoutSessions: await db.select().from(workoutSessions),
+    exerciseLogs: await db.select().from(exerciseLogs),
+    setLogs: await db.select().from(setLogs),
+    progressionState: await db.select().from(progressionState),
+    bodyWeightLogs: await db.select().from(bodyWeightLogs),
+    settings: await import('@/lib/db/settings').then((m) => m.getSettings()),
   }
+}
+
+export const exportCsvAction = async (): Promise<string> => {
+  const db = getDb()
+  const sessions = await db.select().from(workoutSessions)
+  const lines = ['session_id,date,week,mode,status,started_at,finished_at']
+  for (const s of sessions) {
+    lines.push(
+      [s.id, s.date, s.weekNumber, s.mode, s.status, s.startedAt, s.finishedAt ?? ''].join(','),
+    )
+  }
+  return lines.join('\n')
 }

@@ -15,6 +15,20 @@
       "when": 1756316500000,
       "tag": "0001_cycle_offset",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1756316600000,
+      "tag": "0002_gym_program",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1756316700000,
+      "tag": "0003_body_weight",
+      "breakpoints": true
     }
   ]
 }

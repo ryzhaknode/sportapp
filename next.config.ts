@@ -1,11 +1,8 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
-  serverExternalPackages: ['better-sqlite3'],
-  outputFileTracingIncludes: {
-    '/*': ['./node_modules/better-sqlite3/**/*'],
-  },
+  // Docker локально; Vercel сам пакує без standalone
+  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
 }
 
 export default nextConfig

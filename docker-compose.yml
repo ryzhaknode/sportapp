@@ -9,6 +9,20 @@ services:
       - .env
     environment:
       DATABASE_URL: file:/app/data/workouts.db
+      TURSO_DATABASE_URL: ${TURSO_DATABASE_URL:-}
+      TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN:-}
       MOBILE_URL: ${MOBILE_URL}
       NEXT_PUBLIC_MOBILE_URL: ${NEXT_PUBLIC_MOBILE_URL}
     restart: unless-stopped
+
+  # Безкоштовний HTTPS з LTE: Cloudflare Zero Trust → Tunnel → token у .env
+  # Запуск: docker compose --profile tunnel up -d
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app

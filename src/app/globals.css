@@ -46,6 +46,11 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+body[data-overlay-open] .app-bottom-nav {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .breathing-gradient {
   background: linear-gradient(
     135deg,
@@ -55,6 +60,15 @@ body {
   );
   background-size: 200% 200%;
   animation: breathe 6s ease-in-out infinite;
+}
+
+.touch-target {
+  min-height: 3.5rem;
+  min-width: 3.5rem;
+}
+
+.sticky-workout-cta {
+  bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 @keyframes breathe {

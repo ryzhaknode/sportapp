@@ -2,22 +2,28 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BookOpen, Dumbbell, History, Home, Settings } from 'lucide-react'
+import { BookOpen, History, Home, Scale, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const links = [
   { href: '/', label: 'Головна', icon: Home },
-  { href: '/workout', label: 'Тренування', icon: Dumbbell },
-  { href: '/history', label: 'Прогрес', icon: History },
-  { href: '/guide', label: 'Гід', icon: BookOpen },
+  { href: '/history', label: 'Історія', icon: History },
+  { href: '/weight', label: 'Вага', icon: Scale },
+  { href: '/program', label: 'Програма', icon: BookOpen },
   { href: '/settings', label: 'Налашт.', icon: Settings },
 ]
 
 export const Nav = () => {
   const pathname = usePathname()
+  const hide =
+    pathname.startsWith('/workout/') &&
+    !pathname.endsWith('/summary') &&
+    !pathname.startsWith('/workout/weigh-in')
+
+  if (hide) return null
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/90 backdrop-blur-md">
+    <nav className="app-bottom-nav fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md">
       <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-2">
         {links.map(({ href, label, icon: Icon }) => {
           const active = pathname === href

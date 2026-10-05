@@ -1,103 +1,107 @@
-import { HistoryChart } from '@/components/history/history-chart'
-import { SessionList } from '@/components/history/session-list'
-import { TrainingCalendar } from '@/components/calendar/training-calendar'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { buildCalendarMonth } from '@/lib/calendar-build'
-import { getAllSkippedDates } from '@/lib/db/skipped-days'
-import { getAllSessions, getLastSessionByType, parseSets } from '@/lib/db/sessions'
-import { getSettings } from '@/lib/db/settings'
-import type { ExerciseVariant } from '@/lib/workouts'
-import type { WorkoutType } from '@/lib/cycle'
-import { formatDateLocal } from '@/lib/utils'
+import Link from 'next/link'
+import { asc, eq, inArray } from 'drizzle-orm'
+import { getDb } from '@/lib/db'
+import { exerciseSlots, exercises, workoutSessions, workoutTemplates } from '@/lib/db/schema'
+import { getCompletedSessions } from '@/lib/db/workout-sessions'
+import { Badge } from '@/components/ui/badge'
+import { WORKOUT_CODE_COLORS } from '@/lib/program/types'
+import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
 export default async function HistoryPage() {
-  const today = formatDateLocal(new Date())
-  const now = new Date()
-  const appSettings = await getSettings()
-  const variant = appSettings.currentVariant as ExerciseVariant
-  const cycleOffset = appSettings.cycleOffset ?? 0
-  const sessions = await getAllSessions(variant)
-  const skippedDates = await getAllSkippedDates()
+  const sessions = await getCompletedSessions(40)
+  const db = getDb()
 
-  const sessionsByDate: Record<string, { totalReps: number; type: string; completedAt: string | null }> = {}
-  for (const s of sessions) {
-    sessionsByDate[s.date] = {
-      totalReps: s.totalReps,
-      type: s.type,
-      completedAt: s.completedAt,
-    }
+  const templateIds = [...new Set(sessions.map((s) => s.workoutTemplateId))]
+  const templates =
+    templateIds.length > 0
+      ? await db
+          .select()
+          .from(workoutTemplates)
+          .where(inArray(workoutTemplates.id, templateIds))
+      : []
+  const tplMap = new Map(templates.map((t) => [t.id, t.code]))
+
+  const slots = await db.select().from(exerciseSlots).orderBy(asc(exerciseSlots.id))
+  const allEx = await db.select().from(exercises)
+  const exMap = new Map(allEx.map((e) => [e.id, e.name]))
+
+  const seen = new Set<string>()
+  const exerciseLinks: { slotId: number; name: string }[] = []
+  for (const slot of slots) {
+    const name = exMap.get(slot.exerciseId) ?? '?'
+    const key = `${name}-${slot.workoutTemplateId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    exerciseLinks.push({ slotId: slot.id, name })
   }
 
-  const sessionsMap = new Map(
-    sessions.map((s) => [
-      s.date,
-      { totalReps: s.totalReps, type: s.type, completedAt: s.completedAt },
-    ]),
-  )
-  const skippedSet = new Set(skippedDates)
-
-  const initialMonth = buildCalendarMonth({
-    year: now.getFullYear(),
-    month: now.getMonth(),
-    startDate: appSettings.startDate,
-    cycleOffset,
-    today,
-    sessions: sessionsMap,
-    skippedSet,
-  })
-
-  const chartSessions = sessions.map((s) => ({
-    date: s.date,
-    type: s.type as WorkoutType,
-    totalReps: s.totalReps,
-  }))
-
-  const listSessions = await Promise.all(
-    sessions.map(async (session) => {
-      const previous = await getLastSessionByType(
-        session.type as WorkoutType,
-        variant,
-        session.date,
-      )
-      const delta = previous ? session.totalReps - previous.totalReps : null
-
-      return {
-        id: session.id,
-        date: session.date,
-        type: session.type as WorkoutType,
-        totalReps: session.totalReps,
-        sets: parseSets(session.sets).map((s) => s.reps),
-        delta,
-      }
-    }),
-  )
-
   return (
-    <main className="flex min-w-0 flex-col gap-6 overflow-x-hidden px-4 py-6">
+    <main className="flex flex-col gap-4 px-4 py-6 pb-24">
       <header>
-        <h1 className="text-2xl font-bold">Прогрес</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Календар, графік і історія сесій
-        </p>
+        <h1 className="text-2xl font-bold">Історія</h1>
+        <p className="text-sm text-muted-foreground">Завершені тренування</p>
       </header>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Календар тренувань</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TrainingCalendar
-            initialMonth={initialMonth}
-            sessionsByDate={sessionsByDate}
-            skippedDates={skippedDates}
-          />
-        </CardContent>
-      </Card>
+      <ul className="flex flex-col gap-2">
+        {sessions.map((s) => {
+          const code = tplMap.get(s.workoutTemplateId)
+          const dateLabel = new Date(`${s.date}T12:00:00`).toLocaleDateString('uk-UA', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+          })
+          const timeLabel = s.finishedAt
+            ? new Date(s.finishedAt).toLocaleTimeString('uk-UA', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : null
 
-      <HistoryChart sessions={chartSessions} />
-      <SessionList sessions={listSessions} />
+          return (
+            <li key={s.id}>
+              <Link
+                href={`/workout/${s.id}/summary`}
+                className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-secondary/50"
+              >
+                <div>
+                  <p className="font-medium">{dateLabel}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Тиждень {s.weekNumber} · {s.mode}
+                    {timeLabel ? ` · ${timeLabel}` : ''}
+                  </p>
+                </div>
+                {code && (
+                  <Badge variant="outline" className={cn(WORKOUT_CODE_COLORS[code])}>
+                    {code}
+                  </Badge>
+                )}
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+
+      {sessions.length === 0 && (
+        <p className="text-center text-sm text-muted-foreground">Ще немає завершених тренувань.</p>
+      )}
+
+      <section className="mt-4">
+        <h2 className="mb-2 text-lg font-semibold">Вправи</h2>
+        <ul className="flex flex-col gap-2">
+          {exerciseLinks.map((l) => (
+            <li key={l.slotId}>
+              <Link
+                href={`/history/exercise/${l.slotId}`}
+                className="block rounded-xl border border-border px-3 py-2 text-sm hover:bg-secondary/50"
+              >
+                {l.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </main>
   )
 }
