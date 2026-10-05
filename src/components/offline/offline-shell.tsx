@@ -26,7 +26,6 @@ export const OfflineShell = ({ children }: OfflineShellProps) => {
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [online, setOnline] = useState(true)
-  const [shellReady, setShellReady] = useState(false)
 
   const refreshLocalState = useCallback(async () => {
     const [queue, active] = await Promise.all([
@@ -49,7 +48,7 @@ export const OfflineShell = ({ children }: OfflineShellProps) => {
 
   const runSyncAll = useCallback(async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setSyncMessage('Немає мережі до Mac')
+      setSyncMessage('Немає інternetу для синхронізації')
       return
     }
     setSyncing(true)
@@ -98,10 +97,7 @@ export const OfflineShell = ({ children }: OfflineShellProps) => {
   useEffect(() => {
     void refreshLocalState()
     void cacheSnapshot()
-    void registerServiceWorker().then(async () => {
-      await warmOfflineShellCache()
-      setShellReady(true)
-    })
+    void registerServiceWorker().then(() => warmOfflineShellCache())
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       void runSyncAll()
     }
@@ -125,11 +121,6 @@ export const OfflineShell = ({ children }: OfflineShellProps) => {
 
   return (
     <>
-      {online && shellReady && (
-        <p className="sticky top-0 z-30 border-b border-border bg-card/95 px-4 py-1.5 text-center text-xs text-emerald-300/90 backdrop-blur-md">
-          Готово для залу — PWA відкривається з мобільного інternetу
-        </p>
-      )}
       {showBanner && (
         <div className="sticky top-0 z-30 border-b border-border bg-card/95 px-4 py-2 backdrop-blur-md">
           {!online && (
@@ -148,7 +139,7 @@ export const OfflineShell = ({ children }: OfflineShellProps) => {
           {pending.length > 0 && (
             <div className="mt-2 flex flex-col gap-2">
               <p className="text-center text-xs text-muted-foreground">
-                {pending.length} тренувань очікують синхронізації з Mac
+                {pending.length} тренувань очікують синхронізації
               </p>
               <Button
                 type="button"
