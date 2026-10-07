@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { WorkoutTemplateCode } from '@/lib/db/schema'
+import { parseDecimalKg, sanitizeDecimalKgInput } from '@/lib/decimal-kg-input'
 
 interface WeighInFormProps {
   code: WorkoutTemplateCode
@@ -21,9 +22,9 @@ export const WeighInForm = ({ code, defaultWeightKg }: WeighInFormProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const kg = Number(weight.replace(',', '.'))
-    if (!Number.isFinite(kg) || kg <= 0) {
-      setError('Введи вагу в кілограмах')
+    const kg = parseDecimalKg(weight)
+    if (kg == null || kg <= 0 || kg < 30 || kg > 300) {
+      setError('Введи вагу від 30 до 300 кг (можна з десятими, напр. 74.2)')
       return
     }
     setError(null)
@@ -42,17 +43,16 @@ export const WeighInForm = ({ code, defaultWeightKg }: WeighInFormProps) => {
         <Label htmlFor="bodyWeight">Вага, кг</Label>
         <Input
           id="bodyWeight"
-          type="number"
+          type="text"
           inputMode="decimal"
-          step="0.1"
-          min={30}
-          max={300}
+          autoComplete="off"
+          enterKeyHint="done"
           required
           autoFocus
-          placeholder="напр. 82.5"
+          placeholder="напр. 74.2"
           value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-          className="touch-target h-14 text-center text-xl"
+          onChange={(e) => setWeight(sanitizeDecimalKgInput(e.target.value))}
+          className="touch-target h-14 text-center text-xl tabular-nums"
         />
         {defaultWeightKg != null && (
           <p className="text-center text-xs text-muted-foreground">

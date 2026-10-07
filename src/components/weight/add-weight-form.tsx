@@ -6,6 +6,7 @@ import { actionAddBodyWeight } from '@/app/actions/body-weight'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { parseDecimalKg, sanitizeDecimalKgInput } from '@/lib/decimal-kg-input'
 
 export const AddWeightForm = () => {
   const router = useRouter()
@@ -15,8 +16,8 @@ export const AddWeightForm = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const kg = Number(weight.replace(',', '.'))
-    if (!Number.isFinite(kg) || kg <= 0) return
+    const kg = parseDecimalKg(weight)
+    if (kg == null || kg <= 0) return
 
     startTransition(async () => {
       await actionAddBodyWeight({ date, weightKg: kg })
@@ -50,12 +51,13 @@ export const AddWeightForm = () => {
           </Label>
           <Input
             id="weightKg"
-            type="number"
+            type="text"
             inputMode="decimal"
-            step="0.1"
-            placeholder="напр. 82.5"
+            autoComplete="off"
+            enterKeyHint="done"
+            placeholder="напр. 74.2"
             value={weight}
-            onChange={(e) => setWeight(e.target.value)}
+            onChange={(e) => setWeight(sanitizeDecimalKgInput(e.target.value))}
             className="touch-target h-12 w-full text-center text-lg tabular-nums"
             required
           />

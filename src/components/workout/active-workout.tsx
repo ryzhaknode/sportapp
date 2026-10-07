@@ -27,6 +27,7 @@ import type { WeightType } from '@/lib/program/types'
 import { formatDuration } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useWakeLock } from '@/lib/hooks/use-wake-lock'
+import { formatDecimalKg, parseDecimalKg, sanitizeDecimalKgInput } from '@/lib/decimal-kg-input'
 
 interface ActiveWorkoutProps {
   detail: SessionDetail
@@ -51,7 +52,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
     return pending?.id ?? null
   })
 
-  const [weight, setWeight] = useState<number>(0)
+  const [weightInput, setWeightInput] = useState('0')
   const [reps, setReps] = useState<number>(8)
   const [rir, setRir] = useState<number>(2)
   const [saving, setSaving] = useState(false)
@@ -75,7 +76,8 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
 
   useEffect(() => {
     if (!activeSet) return
-    setWeight(activeSet.weight ?? exercise.suggestedWeight ?? 0)
+    const w = activeSet.weight ?? exercise.suggestedWeight ?? 0
+    setWeightInput(formatDecimalKg(w))
     const lastDone = [...exercise.sets].reverse().find((s) => s.status === 'done')
     setReps(lastDone?.reps ?? activeSet.reps ?? exercise.repMin)
     setRir(activeSet.rir ?? exercise.rirMin)
@@ -118,6 +120,8 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
 
   const handleCompleteSet = async () => {
     if (!activeSet || typeof activeSet.id !== 'number') return
+    const weight = parseDecimalKg(weightInput)
+    if (weight == null || weight < 0) return
     setSaving(true)
     try {
       await actionCompleteSet({
@@ -270,24 +274,32 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
                   type="button"
                   variant="secondary"
                   className="touch-target flex-1 text-xl"
-                  onClick={() => setWeight((w) => Math.max(0, +(w - increment).toFixed(2)))}
+                  onClick={() => {
+                    const current = parseDecimalKg(weightInput) ?? 0
+                    setWeightInput(formatDecimalKg(Math.max(0, current - increment)))
+                  }}
                   aria-label="Зменшити вагу"
                 >
                   −
                 </Button>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  value={weight}
-                  onChange={(e) => setWeight(Number(e.target.value))}
-                  className="touch-target w-24 rounded-xl border border-border bg-background text-center text-lg"
-                  aria-label="Вага в kilograms"
+                  autoComplete="off"
+                  enterKeyHint="done"
+                  value={weightInput}
+                  onChange={(e) => setWeightInput(sanitizeDecimalKgInput(e.target.value))}
+                  className="touch-target w-24 rounded-xl border border-border bg-background text-center text-lg tabular-nums"
+                  aria-label="Вага, кг"
                 />
                 <Button
                   type="button"
                   variant="secondary"
                   className="touch-target flex-1 text-xl"
-                  onClick={() => setWeight((w) => +(w + increment).toFixed(2))}
+                  onClick={() => {
+                    const current = parseDecimalKg(weightInput) ?? 0
+                    setWeightInput(formatDecimalKg(current + increment))
+                  }}
                   aria-label="Збільшити вагу"
                 >
                   +
