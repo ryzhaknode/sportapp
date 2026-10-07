@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react'
 import { actionStartWorkout } from '@/app/actions/workout-session'
-import { createLocalWorkout, OfflineCacheError } from '@/lib/offline/local-session'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,19 +10,9 @@ import type { WorkoutTemplateCode } from '@/lib/db/schema'
 interface WeighInFormProps {
   code: WorkoutTemplateCode
   defaultWeightKg: number | null
-  /** Після офлайн-старту — повне завантаження сторінки (для SW-кешу). */
-  offlineWorkoutPath?: string
 }
 
-const goOfflineWorkout = (path: string) => {
-  window.location.assign(path)
-}
-
-export const WeighInForm = ({
-  code,
-  defaultWeightKg,
-  offlineWorkoutPath = '/workout/offline',
-}: WeighInFormProps) => {
+export const WeighInForm = ({ code, defaultWeightKg }: WeighInFormProps) => {
   const [weight, setWeight] = useState(
     defaultWeightKg != null ? String(defaultWeightKg) : '',
   )
@@ -40,37 +29,9 @@ export const WeighInForm = ({
     setError(null)
     startTransition(async () => {
       try {
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          await createLocalWorkout(code, kg)
-          goOfflineWorkout(offlineWorkoutPath)
-          return
-        }
         await actionStartWorkout(code, kg)
-      } catch (err) {
-        if (err instanceof OfflineCacheError) {
-          setError(err.message)
-          return
-        }
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          try {
-            await createLocalWorkout(code, kg)
-            goOfflineWorkout(offlineWorkoutPath)
-            return
-          } catch (offlineErr) {
-            setError(
-              offlineErr instanceof OfflineCacheError
-                ? offlineErr.message
-                : 'Не вдалося почати офлайн-тренування',
-            )
-            return
-          }
-        }
-        try {
-          await createLocalWorkout(code, kg)
-          goOfflineWorkout(offlineWorkoutPath)
-        } catch {
-          setError('Не вдалося почати тренування (немає зв’язку з Mac)')
-        }
+      } catch {
+        setError('Не вдалося почати тренування. Перевір інтернет і спробуй ще раз.')
       }
     })
   }

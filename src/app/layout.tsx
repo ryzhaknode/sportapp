@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Nav } from '@/components/layout/nav'
-import { OfflineShell } from '@/components/offline/offline-shell'
 import './globals.css'
 
 const geistSans = Geist({
@@ -40,9 +39,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="uk" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="min-h-full bg-background antialiased">
-        <div className="app-shell mx-auto max-w-lg">
-          <OfflineShell>{children}</OfflineShell>
-        </div>
+        <div className="app-shell mx-auto max-w-lg">{children}</div>
         <Nav />
       </body>
     </html>

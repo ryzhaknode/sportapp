@@ -40,7 +40,7 @@ docker compose --profile tunnel up --build -d
 
 Відкривай **HTTPS URL з Cloudflare** на телефоні — повний додаток онлайн, база лишається на Mac.
 
-**Зал без Mac взагалі:** офлайн PWA (`/offline`) — тренування на телефоні, sync вдома. Деталі: [docs/mobile-from-anywhere.md](docs/mobile-from-anywhere.md).
+Для залу без Mac зручніше **Vercel + Turso** (див. вище).
 
 ## Тести
 
