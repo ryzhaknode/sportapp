@@ -489,9 +489,9 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         sessionId={detail.session.id}
         restTimer={detail.restTimer}
         nextLabel={
-          exercise.sets.every((s) => s.status !== 'pending')
-            ? detail.exercises[exerciseIndex + 1]?.exerciseName ?? null
-            : `${exercise.exerciseName}, підхід ${(activeSet?.setIndex ?? 0) + 2}`
+          firstPendingSet
+            ? `${exercise.exerciseName}, підхід ${firstPendingSet.setIndex + 1}`
+            : detail.exercises[nextExerciseIndex]?.exerciseName ?? null
         }
         soundEnabled={timerSound}
         vibrationEnabled={timerVibration}
