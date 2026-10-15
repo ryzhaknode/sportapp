@@ -23,13 +23,11 @@ export default async function WorkoutSessionPage({ params }: PageProps<'/workout
 
   const settings = await getSettings()
 
-  const syncKey = detail.exercises
-    .flatMap((e) => e.sets.map((s) => `${s.id}:${s.status}`))
-    .join(',')
-
+  // Keyed on the session only: refreshes after each set must keep the
+  // client state (current exercise) instead of remounting.
   return (
     <ActiveWorkout
-      key={`${sessionId}-${syncKey}`}
+      key={sessionId}
       detail={detail}
       timerSound={settings.timerSoundEnabled}
       timerVibration={settings.timerVibrationEnabled}

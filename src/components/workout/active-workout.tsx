@@ -46,15 +46,14 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
     return firstPending >= 0 ? firstPending : 0
   })
 
-  const [activeSetId, setActiveSetId] = useState<number | string | null>(() => {
-    const ex = detail.exercises[exerciseIndex]
-    const pending = ex?.sets.find((s) => s.status === 'pending')
-    return pending?.id ?? null
-  })
+  // Explicitly tapped set; null means "first pending set of the current exercise",
+  // so after a set is saved the next one is picked up automatically.
+  const [selectedSetId, setSelectedSetId] = useState<number | string | null>(null)
 
   const [weightInput, setWeightInput] = useState('0')
   const [reps, setReps] = useState<number>(8)
   const [rir, setRir] = useState<number>(2)
+  const [formSetId, setFormSetId] = useState<number | string | null>(null)
   const [saving, setSaving] = useState(false)
   const [showExerciseList, setShowExerciseList] = useState(false)
   const [skipMode, setSkipMode] = useState<'set' | 'exercise' | null>(null)
@@ -62,7 +61,10 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
   const [elapsedSec, setElapsedSec] = useState(0)
 
   const exercise = detail.exercises[exerciseIndex]
-  const activeSet = exercise?.sets.find((s) => s.id === activeSetId) ?? null
+  const firstPendingSet = exercise?.sets.find((s) => s.status === 'pending') ?? null
+  const activeSet =
+    exercise?.sets.find((s) => s.id === selectedSetId) ?? firstPendingSet
+  const activeSetId = activeSet?.id ?? null
 
   const increment = exercise?.slot.increment ?? 2.5
 
@@ -74,14 +76,19 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
     return () => clearInterval(id)
   }, [detail.session.startedAt])
 
-  useEffect(() => {
-    if (!activeSet) return
-    const w = activeSet.weight ?? exercise.suggestedWeight ?? 0
-    setWeightInput(formatDecimalKg(w))
+  // Prefill the inputs whenever a different set becomes active.
+  if (activeSet && exercise && formSetId !== activeSet.id) {
+    setFormSetId(activeSet.id)
+    setWeightInput(formatDecimalKg(activeSet.weight ?? exercise.suggestedWeight ?? 0))
     const lastDone = [...exercise.sets].reverse().find((s) => s.status === 'done')
     setReps(lastDone?.reps ?? activeSet.reps ?? exercise.repMin)
     setRir(activeSet.rir ?? exercise.rirMin)
-  }, [activeSetId, exercise, activeSet])
+  }
+
+  const selectExercise = useCallback((index: number) => {
+    setExerciseIndex(index)
+    setSelectedSetId(null)
+  }, [])
 
   const totalSets = useMemo(
     () => detail.exercises.reduce((n, e) => n + e.sets.length, 0),
@@ -110,13 +117,8 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
   }, [router])
 
   const goToNextExercise = useCallback(() => {
-    if (nextExerciseIndex >= 0) {
-      setExerciseIndex(nextExerciseIndex)
-      const nextEx = detail.exercises[nextExerciseIndex]
-      const pending = nextEx?.sets.find((s) => s.status === 'pending')
-      setActiveSetId(pending?.id ?? null)
-    }
-  }, [nextExerciseIndex, detail.exercises])
+    if (nextExerciseIndex >= 0) selectExercise(nextExerciseIndex)
+  }, [nextExerciseIndex, selectExercise])
 
   const handleCompleteSet = async () => {
     if (!activeSet || typeof activeSet.id !== 'number') return
@@ -130,6 +132,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         reps,
         rir,
       })
+      setSelectedSetId(null)
       syncActiveSet()
     } finally {
       setSaving(false)
@@ -145,6 +148,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         await actionSkipSet(activeSet.id, reason)
       }
       setSkipMode(null)
+      setSelectedSetId(null)
       syncActiveSet()
     } finally {
       setSaving(false)
@@ -230,12 +234,11 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
 
         <div className="flex flex-col gap-2">
           {exercise.sets.map((set) => {
-            const firstPending = exercise.sets.find((s) => s.status === 'pending')
-            const isActive = set.id === (activeSetId ?? firstPending?.id)
+            const isActive = set.id === activeSetId
             const isLocked =
               set.status === 'pending' &&
-              firstPending != null &&
-              set.setIndex > firstPending.setIndex
+              firstPendingSet != null &&
+              set.setIndex > firstPendingSet.setIndex
 
             return (
               <SetEntryRow
@@ -244,7 +247,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
                 isActive={isActive}
                 isLocked={isLocked}
                 suggestedReps={set.reps == null ? exercise.repMin : null}
-                onSelect={() => setActiveSetId(set.id)}
+                onSelect={() => setSelectedSetId(set.id)}
               />
             )
           })}
@@ -403,13 +406,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
               variant="ghost"
               className="h-11 min-h-11 flex-1 px-1 text-xs"
               disabled={exerciseIndex === 0}
-              onClick={() => {
-                const newIndex = exerciseIndex - 1
-                setExerciseIndex(newIndex)
-                const ex = detail.exercises[newIndex]
-                const pending = ex?.sets.find((s) => s.status === 'pending')
-                setActiveSetId(pending?.id ?? ex?.sets[0]?.id ?? null)
-              }}
+              onClick={() => selectExercise(exerciseIndex - 1)}
             >
               ‹ Назад
             </Button>
@@ -485,7 +482,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         exercises={detail.exercises}
         currentIndex={exerciseIndex}
         onSelect={(index) => {
-          setExerciseIndex(index)
+          selectExercise(index)
           setShowExerciseList(false)
         }}
         onAddExtra={async (logId) => {
