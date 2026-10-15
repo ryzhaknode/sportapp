@@ -39,7 +39,6 @@ export const NextWorkoutCard = ({
   exercises,
   continueSessionId,
   todayCompletedSessionId,
-  isScheduledToday,
 }: NextWorkoutCardProps) => {
   const doneToday = todayCompletedSessionId != null && !continueSessionId
   return (
