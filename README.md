@@ -42,6 +42,11 @@ docker compose --profile tunnel up --build -d
 
 Для залу без Mac зручніше **Vercel + Turso** (див. вище).
 
+## Знайшли баг?
+
+Створіть issue через форму: **[Issues → Баг](https://github.com/ryzhaknode/sportapp/issues/new/choose)**.  
+Для maintainer: [docs/ingest-triage.md](docs/ingest-triage.md) (Triage Agent у Actions).
+
 ## Тести
 
 ```bash

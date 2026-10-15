@@ -1,0 +1,23 @@
+name: ✨ Ідея / фіча
+description: Пропозиція покращення або нової можливості
+labels: ["source:user"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Коротко
+      placeholder: Що хочете додати або змінити?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Навіщо це потрібно?
+      placeholder: Яку проблему це вирішує?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативи (опційно)
+      placeholder: Чи пробували обійтися без цієї фічі?

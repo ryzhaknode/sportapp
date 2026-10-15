@@ -1,0 +1,35 @@
+name: 🐞 Баг
+description: Щось працює не так, як очікувалось
+labels: ["source:user"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Що сталося?
+      placeholder: Короткий опис проблеми
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Кроки відтворення
+      placeholder: |
+        1. Відкрити ...
+        2. Натиснути ...
+        3. Побачити помилку
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Що очікувалось?
+  - type: input
+    id: env
+    attributes:
+      label: Середовище
+      placeholder: браузер / ОС / версія застосунку
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи або скріншоти
+      render: shell

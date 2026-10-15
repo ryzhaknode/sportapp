@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Деплой і Turso
+    url: https://github.com/ryzhaknode/sportapp/blob/main/docs/deploy-turso-vercel.md
+    about: Документація з налаштування Vercel + Turso
