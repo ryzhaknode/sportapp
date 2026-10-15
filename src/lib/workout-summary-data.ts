@@ -4,7 +4,8 @@ import {
   getProgressionForSlot,
   loadSessionDetail,
 } from '@/lib/db/workout-sessions'
-import { calcTonnage, estimateE1rm, formatWeight, totalReps } from '@/lib/progression/weight'
+import { calcTonnage, formatWeight } from '@/lib/progression/weight'
+import { compareExerciseResult } from '@/lib/workout-summary-compare'
 import type { WeightType } from '@/lib/program/types'
 import { PROGRESSION_LABELS, type ProgressionStatus } from '@/lib/program/types'
 
@@ -68,21 +69,8 @@ export const buildWorkoutSummary = async (sessionId: number): Promise<WorkoutSum
     const prevDone = prevEx?.sets.filter((s) => s.status === 'done') ?? []
     if (prevDone.length) prevTonnage += calcTonnage(prevDone)
 
-    const todayTotal = totalReps(done.map((s) => s.reps ?? 0))
-    const prevTotal = totalReps(prevDone.map((s) => s.reps ?? 0))
-
-    let resultTone: ExerciseSummaryRow['resultTone'] = 'neutral'
-    let resultLabel = 'Без змін'
-    if (todayTotal > prevTotal && prevDone.length) {
-      resultTone = 'good'
-      resultLabel = `+${todayTotal - prevTotal} повторів`
-      progressCount += 1
-    } else if (todayTotal < prevTotal && prevDone.length) {
-      resultTone = 'bad'
-      resultLabel = `${todayTotal - prevTotal} повторів`
-    } else if (done.length && !prevDone.length) {
-      resultLabel = 'Перший запис'
-    }
+    const { resultLabel, resultTone, isPr, progressed } = compareExerciseResult(done, prevDone)
+    if (progressed) progressCount += 1
 
     const progression = await getProgressionForSlot(
       ex.exerciseSlotId,
@@ -96,14 +84,6 @@ export const buildWorkoutSummary = async (sessionId: number): Promise<WorkoutSum
         : status === 'add_reps'
           ? `${formatWeight(progression.suggestedWeight, wt)}, +reps`
           : PROGRESSION_LABELS[status]
-
-    const bestE1rm = Math.max(
-      0,
-      ...done.map((s) => estimateE1rm(s.weight ?? 0, s.reps ?? 0)),
-    )
-    const isPr = bestE1rm > 0 && (!prevDone.length || bestE1rm > Math.max(...prevDone.map((s) => estimateE1rm(s.weight ?? 0, s.reps ?? 0))))
-
-    if (isPr) progressCount += 1
 
     rows.push({
       name: ex.exerciseName,
