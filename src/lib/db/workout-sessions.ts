@@ -15,9 +15,13 @@ import {
   workoutSessions,
   workoutTemplates,
 } from '@/lib/db/schema'
-import { evaluateProgression, type ExerciseLogSnapshot } from '@/lib/progression/evaluate'
+import {
+  evaluateProgressionHistory,
+  type ExerciseLogSnapshot,
+  type ProgressionHistoryEntry,
+} from '@/lib/progression/evaluate'
 import { getEffectiveSlotParams, getWeekContext } from '@/lib/program/week-cycle'
-import { daysSince, getWeekNumber } from '@/lib/program/schedule'
+import { getWeekNumber } from '@/lib/program/schedule'
 import { formatDateLocal } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
 import { formatLastTimeDisplay } from '@/lib/workout-last-display'
@@ -86,22 +90,11 @@ const buildLogSnapshot = (
   }
 }
 
-export const getProgressionForSlot = async (
-  slotId: number,
-  templateId: number,
-  targetSets: number,
-) => {
+export const getProgressionForSlot = async (slotId: number, templateId: number) => {
   const db = getDb()
   const slotRows = await db.select().from(exerciseSlots).where(eq(exerciseSlots.id, slotId)).limit(1)
   const slot = slotRows[0]
   if (!slot) throw new Error('Slot not found')
-
-  const stateRows = await db
-    .select()
-    .from(progressionState)
-    .where(eq(progressionState.exerciseSlotId, slotId))
-    .limit(1)
-  const state = stateRows[0]
 
   const completedSessions = await db
     .select()
@@ -116,7 +109,7 @@ export const getProgressionForSlot = async (
     )
     .orderBy(desc(workoutSessions.finishedAt))
 
-  const snapshots: { date: string; snapshot: ExerciseLogSnapshot }[] = []
+  const history: ProgressionHistoryEntry[] = []
 
   for (const sess of completedSessions) {
     const logs = await db
@@ -135,7 +128,8 @@ export const getProgressionForSlot = async (
       .where(eq(setLogs.exerciseLogId, log.id))
       .orderBy(asc(setLogs.setIndex))
 
-    const doneSets = sets.filter((s) => s.status === 'done' && !s.isExtra)
+    const plannedSets = sets.filter((s) => !s.isExtra)
+    const doneSets = plannedSets.filter((s) => s.status === 'done')
     const weight =
       doneSets.find((s) => s.weight != null)?.weight ??
       log.suggestedWeight ??
@@ -143,22 +137,13 @@ export const getProgressionForSlot = async (
       0
 
     const snap = buildLogSnapshot(weight, doneSets)
-    if (snap) snapshots.push({ date: sess.date, snapshot: snap })
+    if (snap) history.push({ date: sess.date, snapshot: snap, targetSets: plannedSets.length })
   }
 
-  const last = snapshots[0]?.snapshot ?? null
-  const prev = snapshots[1]?.snapshot ?? null
-  const lastDate = snapshots[0]?.date ?? null
-  const today = formatDateLocal(new Date())
-  const daysSinceLast = lastDate ? daysSince(lastDate, today) : null
-
-  return evaluateProgression({
+  return evaluateProgressionHistory({
     slot,
-    lastLog: last,
-    prevLog: prev,
-    stallCount: state?.stallCount ?? 0,
-    daysSinceLastSession: daysSinceLast,
-    targetSets,
+    history,
+    today: formatDateLocal(new Date()),
   })
 }
 
@@ -334,7 +319,7 @@ export const startWorkoutSession = async (
 
   for (const [i, slot] of template.slots.entries()) {
     const effective = getEffectiveSlotParams(slot, context)
-    const progression = await getProgressionForSlot(slot.id, template.id, effective.sets)
+    const progression = await getProgressionForSlot(slot.id, template.id)
 
     const [log] = await db
       .insert(exerciseLogs)
@@ -427,7 +412,6 @@ export const loadSessionDetail = async (sessionId: number): Promise<SessionDetai
     const progression = await getProgressionForSlot(
       log.exerciseSlotId,
       session.workoutTemplateId,
-      effective.sets,
     )
     const lastTimeDisplay = await getLastTimeDisplayForSlot(
       log.exerciseSlotId,
@@ -675,8 +659,19 @@ export const finishWorkoutSession = async (sessionId: number, note?: string) => 
   const detail = await loadSessionDetail(sessionId)
   if (!detail) return { ok: false as const, pending: 0 }
 
-  const settings = await getSettings()
+  await db
+    .update(workoutSessions)
+    .set({
+      status: 'completed',
+      finishedAt: nowIso(),
+      note: note ?? null,
+    })
+    .where(eq(workoutSessions.id, sessionId))
 
+  await db.delete(restTimers).where(eq(restTimers.sessionId, sessionId))
+
+  // Progression is derived from completed-session history (which now includes
+  // this session); progression_state only caches the latest result.
   if (detail.session.mode === 'normal' || detail.session.mode === 'test') {
     for (const ex of detail.exercises) {
       if (ex.status === 'skipped') continue
@@ -684,24 +679,10 @@ export const finishWorkoutSession = async (sessionId: number, note?: string) => 
       const doneSets = ex.sets.filter((s) => s.status === 'done' && !s.isExtra)
       if (doneSets.length === 0) continue
 
-      const weight = doneSets[0].weight ?? ex.suggestedWeight ?? 0
-      const progression = await getProgressionForSlot(
+      const result = await getProgressionForSlot(
         ex.exerciseSlotId,
         detail.session.workoutTemplateId,
-        ex.effectiveSets,
       )
-
-      const doneSnap = buildLogSnapshot(weight, doneSets)
-      if (!doneSnap) continue
-
-      const result = evaluateProgression({
-        slot: ex.slot,
-        lastLog: doneSnap,
-        prevLog: null,
-        stallCount: progression.stallCount,
-        daysSinceLastSession: 0,
-        targetSets: ex.effectiveSets,
-      })
 
       await db
         .insert(progressionState)
@@ -724,18 +705,6 @@ export const finishWorkoutSession = async (sessionId: number, note?: string) => 
     }
   }
 
-  await db
-    .update(workoutSessions)
-    .set({
-      status: 'completed',
-      finishedAt: nowIso(),
-      note: note ?? null,
-    })
-    .where(eq(workoutSessions.id, sessionId))
-
-  await db.delete(restTimers).where(eq(restTimers.sessionId, sessionId))
-
-  void settings
   return { ok: true as const, sessionId }
 }
 
@@ -814,15 +783,9 @@ export const getHomeExercisePreviews = async (code: WorkoutTemplateCode) => {
   const template = await getTemplateByCode(code)
   if (!template) return []
 
-  const settings = await getSettings()
-  const today = formatDateLocal(new Date())
-  const weekNumber = getWeekNumber(settings.programStartDate, today)
-  const context = getWeekContext(weekNumber, settings.tournamentWeekEnabled)
-
   const previews = []
   for (const slot of template.slots) {
-    const effective = getEffectiveSlotParams(slot, context)
-    const progression = await getProgressionForSlot(slot.id, template.id, effective.sets)
+    const progression = await getProgressionForSlot(slot.id, template.id)
     previews.push({
       name: slot.exercise.name,
       slotId: slot.id,

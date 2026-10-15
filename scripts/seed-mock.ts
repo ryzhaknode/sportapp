@@ -16,7 +16,7 @@ import {
   settings,
   workoutSessions,
 } from '../src/lib/db/schema'
-import { getEffectiveSlotParams, getWeekContext } from '../src/lib/program/week-cycle'
+import { getWeekContext } from '../src/lib/program/week-cycle'
 
 type SetSeed = { weight: number; reps: number; rir: number; isExtra?: boolean }
 
@@ -100,11 +100,8 @@ const refreshProgressionState = async () => {
   const template = await getTemplateByCode('A')
   if (!template) return
 
-  const context = getWeekContext(5, false)
-
   for (const slot of template.slots) {
-    const effective = getEffectiveSlotParams(slot, context)
-    const progression = await getProgressionForSlot(slot.id, template.id, effective.sets)
+    const progression = await getProgressionForSlot(slot.id, template.id)
 
     await db
       .insert(progressionState)

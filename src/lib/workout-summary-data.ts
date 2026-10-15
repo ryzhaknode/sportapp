@@ -1,6 +1,9 @@
 import { getTemplateByCode } from '@/lib/db/program'
-import { loadSessionDetail, getPreviousCompletedSession } from '@/lib/db/workout-sessions'
-import { evaluateProgression } from '@/lib/progression/evaluate'
+import {
+  getPreviousCompletedSession,
+  getProgressionForSlot,
+  loadSessionDetail,
+} from '@/lib/db/workout-sessions'
 import { calcTonnage, estimateE1rm, formatWeight, totalReps } from '@/lib/progression/weight'
 import type { WeightType } from '@/lib/program/types'
 import { PROGRESSION_LABELS, type ProgressionStatus } from '@/lib/program/types'
@@ -81,25 +84,10 @@ export const buildWorkoutSummary = async (sessionId: number): Promise<WorkoutSum
       resultLabel = 'Перший запис'
     }
 
-    const progression = evaluateProgression({
-      slot: ex.slot,
-      lastLog:
-        done.length > 0
-          ? {
-              weight: done[0].weight ?? 0,
-              sets: done.map((s) => ({
-                weight: s.weight ?? 0,
-                reps: s.reps ?? 0,
-                rir: s.rir ?? 0,
-                status: 'done' as const,
-              })),
-            }
-          : null,
-      prevLog: null,
-      stallCount: 0,
-      daysSinceLastSession: 0,
-      targetSets: ex.effectiveSets,
-    })
+    const progression = await getProgressionForSlot(
+      ex.exerciseSlotId,
+      detail.session.workoutTemplateId,
+    )
 
     const status = progression.status as ProgressionStatus
     const nextHint =

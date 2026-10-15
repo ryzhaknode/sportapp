@@ -1,5 +1,6 @@
 import type { ExerciseSlot } from '@/lib/db/schema'
 import type { ProgressionStatus } from '@/lib/program/types'
+import { daysSince } from '@/lib/program/schedule'
 import { decreaseWeight, roundToIncrement, totalReps } from '@/lib/progression/weight'
 
 export interface CompletedSetLog {
@@ -101,9 +102,12 @@ export const evaluateProgression = (input: ProgressionInput): ProgressionResult 
     }
   }
 
-  const lastTotal = totalReps(doneSets.map((s) => s.reps))
+  // Compare only the sets both sessions have, so a week with an extra set
+  // doesn't make the following normal week look like a stall (or vice versa).
+  const commonSets = prevLog !== null ? Math.min(doneSets.length, prevLog.sets.length) : 0
+  const lastTotal = totalReps(doneSets.slice(0, commonSets).map((s) => s.reps))
   const prevTotal =
-    prevLog !== null ? totalReps(prevLog.sets.map((s) => s.reps)) : null
+    prevLog !== null ? totalReps(prevLog.sets.slice(0, commonSets).map((s) => s.reps)) : null
 
   if (prevLog !== null && lastLog.weight === prevLog.weight && prevTotal !== null && lastTotal <= prevTotal) {
     stallCount += 1
@@ -129,4 +133,47 @@ export const evaluateProgression = (input: ProgressionInput): ProgressionResult 
     stallCount,
     hint: 'Та сама вага — додай повтори',
   }
+}
+
+export interface ProgressionHistoryEntry {
+  date: string
+  snapshot: ExerciseLogSnapshot
+  /** Planned (non-extra) sets in that session. */
+  targetSets: number
+}
+
+/**
+ * Replays the whole history (newest first) so the stall count is derived from
+ * the logged sessions themselves rather than from separately persisted state.
+ */
+export const evaluateProgressionHistory = (input: {
+  slot: ProgressionInput['slot']
+  history: ProgressionHistoryEntry[]
+  today: string
+}): ProgressionResult => {
+  const { slot, history, today } = input
+
+  let result = evaluateProgression({
+    slot,
+    lastLog: null,
+    prevLog: null,
+    stallCount: 0,
+    daysSinceLastSession: null,
+    targetSets: 0,
+  })
+
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i]
+    const nextDate = i === 0 ? today : history[i - 1].date
+    result = evaluateProgression({
+      slot,
+      lastLog: entry.snapshot,
+      prevLog: history[i + 1]?.snapshot ?? null,
+      stallCount: result.stallCount,
+      daysSinceLastSession: daysSince(entry.date, nextDate),
+      targetSets: entry.targetSets,
+    })
+  }
+
+  return result
 }
