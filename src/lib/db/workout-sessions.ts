@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { getSettings } from '@/lib/db/settings'
 import { getTemplateByCode } from '@/lib/db/program'
@@ -20,7 +20,11 @@ import {
   type ExerciseLogSnapshot,
   type ProgressionHistoryEntry,
 } from '@/lib/progression/evaluate'
-import { getEffectiveSlotParams, getWeekContext } from '@/lib/program/week-cycle'
+import {
+  countsTowardProgression,
+  getEffectiveSlotParams,
+  getWeekContext,
+} from '@/lib/program/week-cycle'
 import { getWeekNumber } from '@/lib/program/schedule'
 import { formatDateLocal } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
@@ -103,8 +107,6 @@ export const getProgressionForSlot = async (slotId: number, templateId: number) 
       and(
         eq(workoutSessions.workoutTemplateId, templateId),
         eq(workoutSessions.status, 'completed'),
-        ne(workoutSessions.mode, 'deload'),
-        ne(workoutSessions.mode, 'tournament'),
       ),
     )
     .orderBy(desc(workoutSessions.finishedAt))
@@ -112,6 +114,8 @@ export const getProgressionForSlot = async (slotId: number, templateId: number) 
   const history: ProgressionHistoryEntry[] = []
 
   for (const sess of completedSessions) {
+    if (!countsTowardProgression(sess.mode)) continue
+
     const logs = await db
       .select()
       .from(exerciseLogs)
@@ -672,7 +676,7 @@ export const finishWorkoutSession = async (sessionId: number, note?: string) => 
 
   // Progression is derived from completed-session history (which now includes
   // this session); progression_state only caches the latest result.
-  if (detail.session.mode === 'normal' || detail.session.mode === 'test') {
+  if (countsTowardProgression(detail.session.mode)) {
     for (const ex of detail.exercises) {
       if (ex.status === 'skipped') continue
 

@@ -89,6 +89,13 @@ export const getEffectiveSlotParams = (
   }
 }
 
+/**
+ * Only regular weeks feed weight progression: deload, test (week 13, 1 set)
+ * and tournament weeks use reduced sets/RIR and would otherwise read as
+ * incomplete sessions or stalls.
+ */
+export const countsTowardProgression = (mode: SessionMode): boolean => mode === 'normal'
+
 export const getModeLabel = (mode: SessionMode): string => {
   switch (mode) {
     case 'deload':
