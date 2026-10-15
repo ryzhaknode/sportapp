@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import { actionAdjustRestTimer, actionClearRestTimer } from '@/app/actions/workout-session'
 import { Button } from '@/components/ui/button'
 import { formatDuration } from '@/lib/utils'
 import { playTimerEndSound, vibratePattern } from '@/lib/timer-feedback'
+import { createRestCountdown } from '@/lib/rest-countdown'
 
 interface RestTimerSheetProps {
   sessionId?: number
@@ -27,8 +28,9 @@ export const RestTimerSheet = ({
   onClear,
   onAdjust,
 }: RestTimerSheetProps) => {
-  const [remaining, setRemaining] = useState(0)
-  const [total, setTotal] = useState(0)
+  const [view, setView] = useState<{ endsAt: string; remaining: number; total: number } | null>(
+    null,
+  )
 
   const endsAt = restTimer?.endsAt ?? null
   const visible = endsAt != null
@@ -39,42 +41,39 @@ export const RestTimerSheet = ({
     return () => document.body.removeAttribute('data-overlay-open')
   }, [visible])
 
+  const onWarn = useEffectEvent(() => {
+    if (vibrationEnabled) vibratePattern([80])
+  })
+
+  const onEnd = useEffectEvent(() => {
+    if (vibrationEnabled) vibratePattern([200, 100, 200])
+    if (soundEnabled) playTimerEndSound()
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('Відпочинок завершено', {
+        body: nextLabel ?? 'Наступний підхід',
+      })
+    }
+  })
+
   useEffect(() => {
-    if (!endsAt) {
-      setRemaining(0)
-      return
-    }
+    if (!endsAt) return
 
-    const endMs = new Date(endsAt).getTime()
-    const startTotal = Math.max(1, Math.ceil((endMs - Date.now()) / 1000))
-    setTotal(startTotal)
+    const countdown = createRestCountdown(new Date(endsAt).getTime(), Date.now(), {
+      onWarn: () => onWarn(),
+      onEnd: () => onEnd(),
+    })
 
-    let warned10 = false
-
+    let id: ReturnType<typeof setInterval> | undefined
     const tick = () => {
-      const sec = Math.max(0, Math.ceil((endMs - Date.now()) / 1000))
-      setRemaining(sec)
-
-      if (sec === 10 && !warned10) {
-        warned10 = true
-        if (vibrationEnabled) vibratePattern([80])
-      }
-
-      if (sec === 0) {
-        if (vibrationEnabled) vibratePattern([200, 100, 200])
-        if (soundEnabled) playTimerEndSound()
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          new Notification('Відпочинок завершено', {
-            body: nextLabel ?? 'Наступний підхід',
-          })
-        }
-      }
+      const remaining = countdown.tick(Date.now())
+      setView({ endsAt, remaining, total: countdown.total })
+      if (remaining === 0) clearInterval(id)
+      return remaining
     }
 
-    tick()
-    const id = setInterval(tick, 250)
+    if (tick() > 0) id = setInterval(tick, 250)
     return () => clearInterval(id)
-  }, [endsAt, nextLabel, soundEnabled, vibrationEnabled])
+  }, [endsAt])
 
   const handleSkip = useCallback(async () => {
     if (onClear) {
@@ -94,9 +93,10 @@ export const RestTimerSheet = ({
     onDismiss()
   }
 
-  if (!endsAt || remaining <= 0) return null
+  const remaining = view && view.endsAt === endsAt ? view.remaining : 0
+  if (!endsAt || !view || remaining <= 0) return null
 
-  const progress = total > 0 ? 1 - remaining / total : 0
+  const progress = 1 - remaining / view.total
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-lg rounded-t-2xl border border-border bg-card/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-md">
