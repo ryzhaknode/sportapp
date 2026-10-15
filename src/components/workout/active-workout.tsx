@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { unstable_rethrow, useRouter } from 'next/navigation'
 import {
   actionAddExtraSet,
   actionCompleteSet,
@@ -27,6 +27,7 @@ import type { WeightType } from '@/lib/program/types'
 import { formatDuration } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useWakeLock } from '@/lib/hooks/use-wake-lock'
+import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
 import { formatDecimalKg, parseDecimalKg, sanitizeDecimalKgInput } from '@/lib/decimal-kg-input'
 
 interface ActiveWorkoutProps {
@@ -57,7 +58,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
   const [saving, setSaving] = useState(false)
   const [showExerciseList, setShowExerciseList] = useState(false)
   const [skipMode, setSkipMode] = useState<'set' | 'exercise' | null>(null)
-  const [finishError, setFinishError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [elapsedSec, setElapsedSec] = useState(0)
 
   const exercise = detail.exercises[exerciseIndex]
@@ -124,6 +125,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
     if (!activeSet || typeof activeSet.id !== 'number') return
     const weight = parseDecimalKg(weightInput)
     if (weight == null || weight < 0) return
+    setError(null)
     setSaving(true)
     try {
       await actionCompleteSet({
@@ -134,12 +136,15 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
       })
       setSelectedSetId(null)
       syncActiveSet()
+    } catch {
+      setError(ACTION_ERROR_MESSAGE)
     } finally {
       setSaving(false)
     }
   }
 
   const handleSkip = async (reason: SkipReason) => {
+    setError(null)
     setSaving(true)
     try {
       if (skipMode === 'exercise' && exercise && typeof exercise.id === 'number') {
@@ -147,22 +152,39 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
       } else if (activeSet && typeof activeSet.id === 'number') {
         await actionSkipSet(activeSet.id, reason)
       }
-      setSkipMode(null)
       setSelectedSetId(null)
       syncActiveSet()
+    } catch {
+      setError(ACTION_ERROR_MESSAGE)
     } finally {
+      setSkipMode(null)
       setSaving(false)
     }
   }
 
+  const handleAddExtra = async (logId: number | string) => {
+    if (typeof logId !== 'number') return
+    setError(null)
+    try {
+      await actionAddExtraSet(logId)
+      syncActiveSet()
+    } catch {
+      setError(ACTION_ERROR_MESSAGE)
+    }
+  }
+
   const handleFinish = async () => {
-    setFinishError(null)
+    setError(null)
     setSaving(true)
     try {
       const result = await actionFinishWorkout(detail.session.id)
       if (result && !result.ok) {
-        setFinishError(`Залишилось ${result.pending} підходів без запису`)
+        setError(`Залишилось ${result.pending} підходів без запису`)
       }
+    } catch (e) {
+      // A successful finish redirects to the summary; let that through.
+      unstable_rethrow(e)
+      setError(ACTION_ERROR_MESSAGE)
     } finally {
       setSaving(false)
     }
@@ -368,9 +390,9 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         )}
       </section>
 
-      {finishError && (
+      {error && (
         <p className="text-sm text-orange-400" role="alert">
-          {finishError}
+          {error}
         </p>
       )}
 
@@ -485,11 +507,7 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
           selectExercise(index)
           setShowExerciseList(false)
         }}
-        onAddExtra={async (logId) => {
-          if (typeof logId !== 'number') return
-          await actionAddExtraSet(logId)
-          syncActiveSet()
-        }}
+        onAddExtra={handleAddExtra}
       />
     </div>
   )

@@ -9,6 +9,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
+
+type ErrorSection = 'program' | 'timer' | 'export'
+
+const EXPORT_ERROR_MESSAGE = 'Не вдалося експортувати дані. Спробуй ще раз.'
 
 interface SettingsFormProps {
   programStartDate: string
@@ -34,22 +39,42 @@ export const SettingsForm = ({
     timerSoundEnabled,
     timerVibrationEnabled,
   })
+  const [error, setError] = useState<{ section: ErrorSection; message: string } | null>(null)
 
-  const handleSaveSettings = () => {
+  const errorFor = (section: ErrorSection) =>
+    error?.section === section ? (
+      <p className="text-sm text-orange-400" role="alert">
+        {error.message}
+      </p>
+    ) : null
+
+  const handleSaveSettings = (section: ErrorSection) => {
+    setError(null)
     startTransition(async () => {
-      await updateSettingsAction({
-        programStartDate: form.programStartDate,
-        tournamentWeekEnabled: form.tournamentWeekEnabled,
-        matchDate: form.matchDate || null,
-        timerSoundEnabled: form.timerSoundEnabled,
-        timerVibrationEnabled: form.timerVibrationEnabled,
-      })
-      router.refresh()
+      try {
+        await updateSettingsAction({
+          programStartDate: form.programStartDate,
+          tournamentWeekEnabled: form.tournamentWeekEnabled,
+          matchDate: form.matchDate || null,
+          timerSoundEnabled: form.timerSoundEnabled,
+          timerVibrationEnabled: form.timerVibrationEnabled,
+        })
+        router.refresh()
+      } catch {
+        setError({ section, message: ACTION_ERROR_MESSAGE })
+      }
     })
   }
 
   const handleExport = async () => {
-    const data = await exportDataAction()
+    setError(null)
+    let data
+    try {
+      data = await exportDataAction()
+    } catch {
+      setError({ section: 'export', message: EXPORT_ERROR_MESSAGE })
+      return
+    }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -60,7 +85,14 @@ export const SettingsForm = ({
   }
 
   const handleExportCsv = async () => {
-    const csv = await exportCsvAction()
+    setError(null)
+    let csv
+    try {
+      csv = await exportCsvAction()
+    } catch {
+      setError({ section: 'export', message: EXPORT_ERROR_MESSAGE })
+      return
+    }
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -110,9 +142,14 @@ export const SettingsForm = ({
             />
             Турнірний тиждень (2 підходи, запас 2–3)
           </label>
-          <Button onClick={handleSaveSettings} disabled={pending} className="touch-target h-12">
+          <Button
+            onClick={() => handleSaveSettings('program')}
+            disabled={pending}
+            className="touch-target h-12"
+          >
             Зберегти
           </Button>
+          {errorFor('program')}
         </CardContent>
       </Card>
 
@@ -144,9 +181,14 @@ export const SettingsForm = ({
           <Button type="button" variant="secondary" className="touch-target h-12" onClick={handleNotifications}>
             Дозволити сповіщення
           </Button>
-          <Button onClick={handleSaveSettings} disabled={pending} variant="outline">
+          <Button
+            onClick={() => handleSaveSettings('timer')}
+            disabled={pending}
+            variant="outline"
+          >
             Зберегти таймер
           </Button>
+          {errorFor('timer')}
         </CardContent>
       </Card>
 
@@ -162,6 +204,7 @@ export const SettingsForm = ({
           <Button variant="outline" onClick={handleExportCsv} className="touch-target h-12 w-full">
             Експорт історії CSV
           </Button>
+          {errorFor('export')}
         </CardContent>
       </Card>
     </div>

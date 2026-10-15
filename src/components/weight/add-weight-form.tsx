@@ -7,22 +7,29 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { parseDecimalKg, sanitizeDecimalKgInput } from '@/lib/decimal-kg-input'
+import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
 
 export const AddWeightForm = () => {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [weight, setWeight] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const kg = parseDecimalKg(weight)
     if (kg == null || kg <= 0) return
 
+    setError(null)
     startTransition(async () => {
-      await actionAddBodyWeight({ date, weightKg: kg })
-      setWeight('')
-      router.refresh()
+      try {
+        await actionAddBodyWeight({ date, weightKg: kg })
+        setWeight('')
+        router.refresh()
+      } catch {
+        setError(ACTION_ERROR_MESSAGE)
+      }
     })
   }
 
@@ -63,6 +70,11 @@ export const AddWeightForm = () => {
           />
         </div>
       </div>
+      {error && (
+        <p className="text-sm text-orange-400" role="alert">
+          {error}
+        </p>
+      )}
       <Button type="submit" disabled={pending} className="touch-target h-14 w-full text-base">
         Зберегти
       </Button>

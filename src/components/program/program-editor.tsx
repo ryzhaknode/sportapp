@@ -10,6 +10,7 @@ import type { TemplateWithSlots } from '@/lib/db/program'
 import { WORKOUT_CODE_COLORS } from '@/lib/program/types'
 import { cn } from '@/lib/utils'
 import { formatDuration } from '@/lib/utils'
+import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
 
 interface ProgramEditorProps {
   templates: TemplateWithSlots[]
@@ -20,9 +21,11 @@ export const ProgramEditor = ({ templates }: ProgramEditorProps) => {
   const [pending, startTransition] = useTransition()
   const [editingId, setEditingId] = useState<number | null>(null)
   const [draft, setDraft] = useState<Record<string, string>>({})
+  const [error, setError] = useState<string | null>(null)
 
   const startEdit = (slotId: number, slot: TemplateWithSlots['slots'][0]) => {
     setEditingId(slotId)
+    setError(null)
     setDraft({
       sets: String(slot.sets),
       repMin: String(slot.repMin),
@@ -36,19 +39,24 @@ export const ProgramEditor = ({ templates }: ProgramEditorProps) => {
   }
 
   const save = (slotId: number) => {
+    setError(null)
     startTransition(async () => {
-      await updateSlotAction(slotId, {
-        sets: Number(draft.sets),
-        repMin: Number(draft.repMin),
-        repMax: Number(draft.repMax),
-        rirMin: Number(draft.rirMin),
-        rirMax: Number(draft.rirMax),
-        restSec: Number(draft.restSec),
-        startWeight: draft.startWeight ? Number(draft.startWeight) : null,
-        increment: Number(draft.increment),
-      })
-      setEditingId(null)
-      router.refresh()
+      try {
+        await updateSlotAction(slotId, {
+          sets: Number(draft.sets),
+          repMin: Number(draft.repMin),
+          repMax: Number(draft.repMax),
+          rirMin: Number(draft.rirMin),
+          rirMax: Number(draft.rirMax),
+          restSec: Number(draft.restSec),
+          startWeight: draft.startWeight ? Number(draft.startWeight) : null,
+          increment: Number(draft.increment),
+        })
+        setEditingId(null)
+        router.refresh()
+      } catch {
+        setError(ACTION_ERROR_MESSAGE)
+      }
     })
   }
 
@@ -101,6 +109,11 @@ export const ProgramEditor = ({ templates }: ProgramEditorProps) => {
                         Скасувати
                       </Button>
                     </div>
+                    {error && (
+                      <p className="col-span-2 text-sm text-orange-400" role="alert">
+                        {error}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <Button
