@@ -11,6 +11,7 @@ import {
   completeSet,
   finishWorkoutSession,
   resolveStaleSession,
+  saveSessionNote,
   skipExercise,
   skipSet,
   startWorkoutSession,
@@ -92,4 +93,13 @@ export const actionResolveStaleSession = async (sessionId: number) => {
     redirect(`/workout/${sessionId}/summary`)
   }
   return result
+}
+
+export const actionSaveSessionNote = async (sessionId: number, note: string) => {
+  if (!Number.isInteger(sessionId) || typeof note !== 'string') {
+    throw new Error('INVALID_NOTE')
+  }
+  await saveSessionNote(sessionId, note)
+  revalidatePath(`/workout/${sessionId}/summary`)
+  revalidatePath('/history')
 }

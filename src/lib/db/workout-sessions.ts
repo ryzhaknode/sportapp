@@ -712,6 +712,17 @@ export const finishWorkoutSession = async (sessionId: number, note?: string) => 
   return { ok: true as const, sessionId }
 }
 
+export const SESSION_NOTE_MAX_LENGTH = 2000
+
+export const saveSessionNote = async (sessionId: number, note: string) => {
+  const db = getDb()
+  const trimmed = note.trim().slice(0, SESSION_NOTE_MAX_LENGTH)
+  await db
+    .update(workoutSessions)
+    .set({ note: trimmed || null })
+    .where(eq(workoutSessions.id, sessionId))
+}
+
 export const abandonSession = async (sessionId: number) => {
   const db = getDb()
   await db

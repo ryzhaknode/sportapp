@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { actionSaveSessionNote } from '@/app/actions/workout-session'
 import { Button } from '@/components/ui/button'
 import type { WorkoutSummaryData } from '@/lib/workout-summary-data'
 import { formatDuration } from '@/lib/utils'
@@ -13,8 +14,28 @@ interface WorkoutSummaryViewProps {
   initialNote?: string | null
 }
 
-export const WorkoutSummaryView = ({ summary, initialNote }: WorkoutSummaryViewProps) => {
+export const WorkoutSummaryView = ({ sessionId, summary, initialNote }: WorkoutSummaryViewProps) => {
+  const router = useRouter()
   const [note, setNote] = useState(initialNote ?? '')
+  const [savedNote, setSavedNote] = useState(initialNote ?? '')
+  const [noteError, setNoteError] = useState<string | null>(null)
+
+  const saveNote = async (): Promise<boolean> => {
+    if (note === savedNote) return true
+    setNoteError(null)
+    try {
+      await actionSaveSessionNote(sessionId, note)
+      setSavedNote(note)
+      return true
+    } catch {
+      setNoteError('Не вдалося зберегти нотатку. Перевір з’єднання і спробуй ще раз.')
+      return false
+    }
+  }
+
+  const handleDone = async () => {
+    if (await saveNote()) router.push('/')
+  }
 
   return (
     <main className="flex flex-col gap-6 px-4 py-6 pb-24">
@@ -80,17 +101,22 @@ export const WorkoutSummaryView = ({ summary, initialNote }: WorkoutSummaryViewP
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          onBlur={() => void saveNote()}
           rows={3}
+          maxLength={2000}
           className="rounded-xl border border-border bg-background p-3"
           placeholder="Сон, самопочуття…"
         />
       </label>
+      {noteError && (
+        <p className="-mt-4 text-sm text-orange-400" role="alert">
+          {noteError}
+        </p>
+      )}
 
-      <Link href="/">
-        <Button type="button" className="touch-target h-14 w-full">
-          Готово
-        </Button>
-      </Link>
+      <Button type="button" className="touch-target h-14 w-full" onClick={handleDone}>
+        Готово
+      </Button>
     </main>
   )
 }
