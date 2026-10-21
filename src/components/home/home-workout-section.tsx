@@ -54,6 +54,9 @@ export const HomeWorkoutSection = ({
   )
 
   const exercises = previews[effectiveCode]
+  // The card renders its own "continue"/"summary" link in these cases; wrapping it in the
+  // start link would nest <a> in <a> (and weigh-in 404s for a code already done today).
+  const canStart = !continueSessionId && completedSessionId[effectiveCode] == null
 
   const card = (
     <NextWorkoutCard
@@ -78,11 +81,7 @@ export const HomeWorkoutSection = ({
         />
       )}
 
-      {continueSessionId ? (
-        card
-      ) : (
-        <StartWorkoutForm code={selected}>{card}</StartWorkoutForm>
-      )}
+      {canStart ? <StartWorkoutForm code={selected}>{card}</StartWorkoutForm> : card}
 
       {!continueSessionId && scheduledToday && selected !== scheduledToday && (
         <p className="text-center text-xs text-muted-foreground">
