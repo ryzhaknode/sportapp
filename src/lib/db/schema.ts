@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const settings = sqliteTable('settings', {
   id: integer('id').primaryKey(),
@@ -65,7 +65,13 @@ export const workoutSessions = sqliteTable('workout_sessions', {
   mode: text('mode', { enum: ['normal', 'deload', 'tournament', 'test'] }).notNull(),
   status: text('status', { enum: ['in_progress', 'completed', 'abandoned'] }).notNull(),
   note: text('note'),
-})
+}, (t) => [
+  index('workout_sessions_template_status_finished_idx').on(
+    t.workoutTemplateId,
+    t.status,
+    t.finishedAt,
+  ),
+])
 
 export const exerciseLogs = sqliteTable('exercise_logs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -76,7 +82,10 @@ export const exerciseLogs = sqliteTable('exercise_logs', {
   skipReason: text('skip_reason'),
   suggestedWeight: real('suggested_weight'),
   suggestedStatus: text('suggested_status'),
-})
+}, (t) => [
+  index('exercise_logs_session_id_idx').on(t.sessionId),
+  index('exercise_logs_exercise_slot_id_idx').on(t.exerciseSlotId),
+])
 
 export const setLogs = sqliteTable('set_logs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -89,7 +98,7 @@ export const setLogs = sqliteTable('set_logs', {
   isExtra: integer('is_extra', { mode: 'boolean' }).notNull().default(false),
   skipReason: text('skip_reason'),
   completedAt: text('completed_at'),
-})
+}, (t) => [index('set_logs_exercise_log_id_set_index_idx').on(t.exerciseLogId, t.setIndex)])
 
 export const progressionState = sqliteTable('progression_state', {
   exerciseSlotId: integer('exercise_slot_id').primaryKey(),

@@ -29,6 +29,13 @@
       "when": 1756316700000,
       "tag": "0003_body_weight",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1756316900000,
+      "tag": "0005_history_indexes",
+      "breakpoints": true
     }
   ]
 }

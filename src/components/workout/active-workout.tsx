@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { unstable_rethrow, useRouter } from 'next/navigation'
+import { unstable_rethrow } from 'next/navigation'
 import {
   actionAddExtraSet,
   actionCompleteSet,
@@ -38,7 +38,6 @@ interface ActiveWorkoutProps {
 
 export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWorkoutProps) => {
   useWakeLock(true)
-  const router = useRouter()
 
   const [exerciseIndex, setExerciseIndex] = useState(() => {
     const firstPending = detail.exercises.findIndex((e) =>
@@ -113,10 +112,6 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
   const hasNextExercise = nextExerciseIndex >= 0
   const allWorkoutDone = completedSets >= totalSets
 
-  const syncActiveSet = useCallback(() => {
-    router.refresh()
-  }, [router])
-
   const goToNextExercise = useCallback(() => {
     if (nextExerciseIndex >= 0) selectExercise(nextExerciseIndex)
   }, [nextExerciseIndex, selectExercise])
@@ -135,7 +130,6 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         rir,
       })
       setSelectedSetId(null)
-      syncActiveSet()
     } catch {
       setError(ACTION_ERROR_MESSAGE)
     } finally {
@@ -153,7 +147,6 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         await actionSkipSet(activeSet.id, reason)
       }
       setSelectedSetId(null)
-      syncActiveSet()
     } catch {
       setError(ACTION_ERROR_MESSAGE)
     } finally {
@@ -167,7 +160,6 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
     setError(null)
     try {
       await actionAddExtraSet(logId)
-      syncActiveSet()
     } catch {
       setError(ACTION_ERROR_MESSAGE)
     }
@@ -495,7 +487,6 @@ export const ActiveWorkout = ({ detail, timerSound, timerVibration }: ActiveWork
         }
         soundEnabled={timerSound}
         vibrationEnabled={timerVibration}
-        onDismiss={() => syncActiveSet()}
       />
 
       <ExerciseListSheet

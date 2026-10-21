@@ -1,8 +1,10 @@
 import { getTemplateByCode } from '@/lib/db/program'
 import {
   getPreviousCompletedSession,
-  getProgressionForSlot,
   loadSessionDetail,
+  loadTemplateHistory,
+  progressionFromHistory,
+  type SessionDetail,
 } from '@/lib/db/workout-sessions'
 import { calcTonnage, formatWeight } from '@/lib/progression/weight'
 import { compareExerciseResult } from '@/lib/workout-summary-compare'
@@ -38,14 +40,16 @@ const formatSets = (sets: { weight: number | null; reps: number | null }[], wt: 
   return `${prefix} × ${reps}`
 }
 
-export const buildWorkoutSummary = async (sessionId: number): Promise<WorkoutSummaryData | null> => {
-  const detail = await loadSessionDetail(sessionId)
-  if (!detail || !detail.session.finishedAt) return null
+export const buildWorkoutSummary = async (
+  detail: SessionDetail,
+): Promise<WorkoutSummaryData | null> => {
+  if (!detail.session.finishedAt) return null
+  const sessionId = detail.session.id
 
-  const prevSession = await getPreviousCompletedSession(
-    detail.session.workoutTemplateId,
-    sessionId,
-  )
+  const [prevSession, history] = await Promise.all([
+    getPreviousCompletedSession(detail.session.workoutTemplateId, sessionId),
+    loadTemplateHistory(detail.session.workoutTemplateId),
+  ])
   const prevDetail =
     prevSession && prevSession.id !== sessionId
       ? await loadSessionDetail(prevSession.id)
@@ -72,10 +76,7 @@ export const buildWorkoutSummary = async (sessionId: number): Promise<WorkoutSum
     const { resultLabel, resultTone, isPr, progressed } = compareExerciseResult(done, prevDone)
     if (progressed) progressCount += 1
 
-    const progression = await getProgressionForSlot(
-      ex.exerciseSlotId,
-      detail.session.workoutTemplateId,
-    )
+    const progression = progressionFromHistory(history, ex.slot)
 
     const status = progression.status as ProgressionStatus
     const nextHint =

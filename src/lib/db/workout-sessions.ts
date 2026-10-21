@@ -1,8 +1,9 @@
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { getSettings } from '@/lib/db/settings'
 import { getTemplateByCode } from '@/lib/db/program'
 import {
+  type ExerciseSlot,
   exerciseLogs,
   exerciseSlots,
   exercises,
@@ -15,11 +16,14 @@ import {
   workoutSessions,
   workoutTemplates,
 } from '@/lib/db/schema'
+import { evaluateProgressionHistory } from '@/lib/progression/evaluate'
 import {
-  evaluateProgressionHistory,
-  type ExerciseLogSnapshot,
-  type ProgressionHistoryEntry,
-} from '@/lib/progression/evaluate'
+  groupHistoryBySlot,
+  pickLastCompletedSets,
+  pickLastTimeDisplay,
+  toProgressionHistory,
+  type SlotHistory,
+} from '@/lib/progression/history'
 import {
   countsTowardProgression,
   getEffectiveSlotParams,
@@ -28,8 +32,8 @@ import {
 import { getWeekNumber } from '@/lib/program/schedule'
 import { formatDateLocal } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
-import { formatLastTimeDisplay } from '@/lib/workout-last-display'
 import type { WeightType } from '@/lib/program/types'
+import { estimateE1rm } from '@/lib/progression/weight'
 
 const nowIso = (): string => new Date().toISOString()
 
@@ -74,25 +78,52 @@ export interface SessionDetail {
   restTimer: { endsAt: string; label: string | null } | null
 }
 
-const buildLogSnapshot = (
-  weight: number,
-  sets: { weight: number | null; reps: number | null; rir: number | null; status: string }[],
-): ExerciseLogSnapshot | null => {
-  const done = sets.filter(
-    (s) => s.status === 'done' && s.reps != null && s.rir != null && s.weight != null,
-  )
-  if (done.length === 0) return null
-  const w = weight ?? done[0].weight!
-  return {
-    weight: w,
-    sets: done.map((s) => ({
-      weight: s.weight!,
-      reps: s.reps!,
-      rir: s.rir!,
-      status: 'done' as const,
-    })),
-  }
+/** Completed history of a template in one query, grouped per slot (newest session first). */
+export const loadTemplateHistory = async (templateId: number): Promise<SlotHistory> => {
+  const db = getDb()
+  const rows = await db
+    .select({
+      sessionId: workoutSessions.id,
+      date: workoutSessions.date,
+      mode: workoutSessions.mode,
+      logId: exerciseLogs.id,
+      slotId: exerciseLogs.exerciseSlotId,
+      logStatus: exerciseLogs.status,
+      suggestedWeight: exerciseLogs.suggestedWeight,
+      set: {
+        setIndex: setLogs.setIndex,
+        weight: setLogs.weight,
+        reps: setLogs.reps,
+        rir: setLogs.rir,
+        status: setLogs.status,
+        isExtra: setLogs.isExtra,
+      },
+    })
+    .from(workoutSessions)
+    .innerJoin(exerciseLogs, eq(exerciseLogs.sessionId, workoutSessions.id))
+    .leftJoin(setLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
+    .where(
+      and(
+        eq(workoutSessions.workoutTemplateId, templateId),
+        eq(workoutSessions.status, 'completed'),
+      ),
+    )
+    .orderBy(
+      desc(workoutSessions.finishedAt),
+      asc(workoutSessions.id),
+      asc(exerciseLogs.id),
+      asc(setLogs.setIndex),
+    )
+
+  return groupHistoryBySlot(rows)
 }
+
+export const progressionFromHistory = (history: SlotHistory, slot: ExerciseSlot) =>
+  evaluateProgressionHistory({
+    slot,
+    history: toProgressionHistory(history.get(slot.id) ?? [], slot),
+    today: formatDateLocal(new Date()),
+  })
 
 export const getProgressionForSlot = async (slotId: number, templateId: number) => {
   const db = getDb()
@@ -100,155 +131,7 @@ export const getProgressionForSlot = async (slotId: number, templateId: number) 
   const slot = slotRows[0]
   if (!slot) throw new Error('Slot not found')
 
-  const completedSessions = await db
-    .select()
-    .from(workoutSessions)
-    .where(
-      and(
-        eq(workoutSessions.workoutTemplateId, templateId),
-        eq(workoutSessions.status, 'completed'),
-      ),
-    )
-    .orderBy(desc(workoutSessions.finishedAt))
-
-  const history: ProgressionHistoryEntry[] = []
-
-  for (const sess of completedSessions) {
-    if (!countsTowardProgression(sess.mode)) continue
-
-    const logs = await db
-      .select()
-      .from(exerciseLogs)
-      .where(
-        and(eq(exerciseLogs.sessionId, sess.id), eq(exerciseLogs.exerciseSlotId, slotId)),
-      )
-      .limit(1)
-    const log = logs[0]
-    if (!log || log.status === 'skipped') continue
-
-    const sets = await db
-      .select()
-      .from(setLogs)
-      .where(eq(setLogs.exerciseLogId, log.id))
-      .orderBy(asc(setLogs.setIndex))
-
-    const plannedSets = sets.filter((s) => !s.isExtra)
-    const doneSets = plannedSets.filter((s) => s.status === 'done')
-    const weight =
-      doneSets.find((s) => s.weight != null)?.weight ??
-      log.suggestedWeight ??
-      slot.startWeight ??
-      0
-
-    const snap = buildLogSnapshot(weight, doneSets)
-    if (snap) history.push({ date: sess.date, snapshot: snap, targetSets: plannedSets.length })
-  }
-
-  return evaluateProgressionHistory({
-    slot,
-    history,
-    today: formatDateLocal(new Date()),
-  })
-}
-
-export interface LastSetValues {
-  weight: number
-  reps: number
-  rir: number
-}
-
-const getLastCompletedSetsForSlot = async (
-  slotId: number,
-  templateId: number,
-): Promise<LastSetValues[] | null> => {
-  const db = getDb()
-  const completedSessions = await db
-    .select()
-    .from(workoutSessions)
-    .where(
-      and(
-        eq(workoutSessions.workoutTemplateId, templateId),
-        eq(workoutSessions.status, 'completed'),
-      ),
-    )
-    .orderBy(desc(workoutSessions.finishedAt))
-
-  for (const sess of completedSessions) {
-    const logs = await db
-      .select()
-      .from(exerciseLogs)
-      .where(
-        and(eq(exerciseLogs.sessionId, sess.id), eq(exerciseLogs.exerciseSlotId, slotId)),
-      )
-      .limit(1)
-    const log = logs[0]
-    if (!log || log.status === 'skipped') continue
-
-    const sets = await db
-      .select()
-      .from(setLogs)
-      .where(eq(setLogs.exerciseLogId, log.id))
-      .orderBy(asc(setLogs.setIndex))
-
-    const done = sets.filter(
-      (s) => s.status === 'done' && !s.isExtra && s.reps != null && s.weight != null,
-    )
-    if (done.length === 0) continue
-
-    return done.map((s) => ({
-      weight: s.weight!,
-      reps: s.reps!,
-      rir: s.rir ?? 2,
-    }))
-  }
-  return null
-}
-
-export const getLastTimeDisplayForSlot = async (
-  slotId: number,
-  templateId: number,
-  weightType: WeightType,
-): Promise<string | null> => {
-  const db = getDb()
-  const completedSessions = await db
-    .select()
-    .from(workoutSessions)
-    .where(
-      and(
-        eq(workoutSessions.workoutTemplateId, templateId),
-        eq(workoutSessions.status, 'completed'),
-      ),
-    )
-    .orderBy(desc(workoutSessions.finishedAt))
-
-  for (const sess of completedSessions) {
-    const logs = await db
-      .select()
-      .from(exerciseLogs)
-      .where(
-        and(eq(exerciseLogs.sessionId, sess.id), eq(exerciseLogs.exerciseSlotId, slotId)),
-      )
-      .limit(1)
-    const log = logs[0]
-    if (!log || log.status === 'skipped') continue
-
-    const sets = await db
-      .select()
-      .from(setLogs)
-      .where(eq(setLogs.exerciseLogId, log.id))
-      .orderBy(asc(setLogs.setIndex))
-
-    return formatLastTimeDisplay(
-      sets.map((s) => ({
-        weight: s.weight,
-        reps: s.reps,
-        isExtra: s.isExtra,
-        status: s.status,
-      })),
-      weightType,
-    )
-  }
-  return null
+  return progressionFromHistory(await loadTemplateHistory(templateId), slot)
 }
 
 export const getTodayCompletedSessionForCode = async (
@@ -309,6 +192,8 @@ export const startWorkoutSession = async (
   const weekNumber = getWeekNumber(settings.programStartDate, today)
   const context = getWeekContext(weekNumber, settings.tournamentWeekEnabled)
 
+  const history = await loadTemplateHistory(template.id)
+
   const [session] = await db
     .insert(workoutSessions)
     .values({
@@ -321,38 +206,48 @@ export const startWorkoutSession = async (
     })
     .returning()
 
-  for (const [i, slot] of template.slots.entries()) {
-    const effective = getEffectiveSlotParams(slot, context)
-    const progression = await getProgressionForSlot(slot.id, template.id)
+  const plans = template.slots.map((slot, i) => ({
+    slot,
+    sortOrder: i,
+    effective: getEffectiveSlotParams(slot, context),
+    progression: progressionFromHistory(history, slot),
+    lastSets: pickLastCompletedSets(history.get(slot.id) ?? []),
+  }))
 
-    const [log] = await db
+  if (plans.length > 0) {
+    const logs = await db
       .insert(exerciseLogs)
-      .values({
-        sessionId: session.id,
-        exerciseSlotId: slot.id,
-        sortOrder: i,
-        status: 'pending',
-        suggestedWeight: progression.suggestedWeight,
-        suggestedStatus: progression.status,
-      })
+      .values(
+        plans.map(({ slot, sortOrder, progression }) => ({
+          sessionId: session.id,
+          exerciseSlotId: slot.id,
+          sortOrder,
+          status: 'pending' as const,
+          suggestedWeight: progression.suggestedWeight,
+          suggestedStatus: progression.status,
+        })),
+      )
       .returning()
+    // RETURNING order isn't guaranteed in SQLite, so match logs back by slot.
+    const logIdBySlot = new Map(logs.map((l) => [l.exerciseSlotId, l.id]))
 
-    const lastSets = await getLastCompletedSetsForSlot(slot.id, template.id)
-    const fallbackWeight = progression.suggestedWeight ?? slot.startWeight
-    const fallbackReps = progression.suggestedRepTarget
-
-    for (let si = 0; si < effective.sets; si += 1) {
-      const fromLast = lastSets?.[si] ?? lastSets?.[lastSets.length - 1]
-      await db.insert(setLogs).values({
-        exerciseLogId: log.id,
-        setIndex: si,
-        weight: fromLast?.weight ?? fallbackWeight,
-        reps: fromLast?.reps ?? fallbackReps,
-        rir: fromLast?.rir ?? effective.rirMin,
-        status: 'pending',
-        isExtra: false,
+    const sets = plans.flatMap(({ slot, effective, progression, lastSets }) => {
+      const fallbackWeight = progression.suggestedWeight ?? slot.startWeight
+      const fallbackReps = progression.suggestedRepTarget
+      return Array.from({ length: effective.sets }, (_, si) => {
+        const fromLast = lastSets?.[si] ?? lastSets?.[lastSets.length - 1]
+        return {
+          exerciseLogId: logIdBySlot.get(slot.id)!,
+          setIndex: si,
+          weight: fromLast?.weight ?? fallbackWeight,
+          reps: fromLast?.reps ?? fallbackReps,
+          rir: fromLast?.rir ?? effective.rirMin,
+          status: 'pending' as const,
+          isExtra: false,
+        }
       })
-    }
+    })
+    if (sets.length > 0) await db.insert(setLogs).values(sets)
   }
 
   const { logBodyWeightForSession } = await import('@/lib/db/body-weight')
@@ -375,55 +270,46 @@ export const loadSessionDetail = async (sessionId: number): Promise<SessionDetai
   const session = sessRows[0]
   if (!session) return null
 
-  const tpl = await db
-    .select()
-    .from(workoutTemplates)
-    .where(eq(workoutTemplates.id, session.workoutTemplateId))
-    .limit(1)
+  const [tpl, settings, logs, sets, timer, history] = await Promise.all([
+    db
+      .select()
+      .from(workoutTemplates)
+      .where(eq(workoutTemplates.id, session.workoutTemplateId))
+      .limit(1),
+    getSettings(),
+    db
+      .select({ log: exerciseLogs, slot: exerciseSlots, exercise: exercises })
+      .from(exerciseLogs)
+      .innerJoin(exerciseSlots, eq(exerciseSlots.id, exerciseLogs.exerciseSlotId))
+      .innerJoin(exercises, eq(exercises.id, exerciseSlots.exerciseId))
+      .where(eq(exerciseLogs.sessionId, sessionId))
+      .orderBy(asc(exerciseLogs.sortOrder)),
+    db
+      .select({ set: setLogs })
+      .from(setLogs)
+      .innerJoin(exerciseLogs, eq(exerciseLogs.id, setLogs.exerciseLogId))
+      .where(eq(exerciseLogs.sessionId, sessionId))
+      .orderBy(asc(setLogs.setIndex)),
+    db.select().from(restTimers).where(eq(restTimers.sessionId, sessionId)).limit(1),
+    loadTemplateHistory(session.workoutTemplateId),
+  ])
   const templateCode = tpl[0]?.code as WorkoutTemplateCode
-
-  const settings = await getSettings()
   const context = getWeekContext(session.weekNumber, settings.tournamentWeekEnabled)
 
-  const logs = await db
-    .select()
-    .from(exerciseLogs)
-    .where(eq(exerciseLogs.sessionId, sessionId))
-    .orderBy(asc(exerciseLogs.sortOrder))
+  const setsByLog = new Map<number, (typeof sets)[number]['set'][]>()
+  for (const { set } of sets) {
+    const list = setsByLog.get(set.exerciseLogId)
+    if (list) list.push(set)
+    else setsByLog.set(set.exerciseLogId, [set])
+  }
 
-  const exerciseRows: ExerciseLogRow[] = []
+  const exerciseRows: ExerciseLogRow[] = logs.map(({ log, slot, exercise: ex }) => {
+    const effective = getEffectiveSlotParams(slot, context)
+    const wt = ex.weightType as WeightType
+    const progression = progressionFromHistory(history, slot)
+    const lastTimeDisplay = pickLastTimeDisplay(history.get(slot.id) ?? [], wt)
 
-  for (const log of logs) {
-    const slot = await db
-      .select()
-      .from(exerciseSlots)
-      .where(eq(exerciseSlots.id, log.exerciseSlotId))
-      .limit(1)
-    const ex = await db
-      .select()
-      .from(exercises)
-      .where(eq(exercises.id, slot[0].exerciseId))
-      .limit(1)
-
-    const effective = getEffectiveSlotParams(slot[0], context)
-    const sets = await db
-      .select()
-      .from(setLogs)
-      .where(eq(setLogs.exerciseLogId, log.id))
-      .orderBy(asc(setLogs.setIndex))
-
-    const wt = ex[0].weightType as WeightType
-    const progression = await getProgressionForSlot(
-      log.exerciseSlotId,
-      session.workoutTemplateId,
-    )
-    const lastTimeDisplay = await getLastTimeDisplayForSlot(
-      log.exerciseSlotId,
-      session.workoutTemplateId,
-      wt,
-    )
-
-    exerciseRows.push({
+    return {
       id: log.id,
       exerciseSlotId: log.exerciseSlotId,
       sortOrder: log.sortOrder,
@@ -431,9 +317,9 @@ export const loadSessionDetail = async (sessionId: number): Promise<SessionDetai
       skipReason: log.skipReason,
       suggestedWeight: log.suggestedWeight,
       suggestedStatus: log.suggestedStatus,
-      exerciseName: ex[0].name,
-      weightType: ex[0].weightType,
-      slot: slot[0],
+      exerciseName: ex.name,
+      weightType: ex.weightType,
+      slot,
       effectiveSets: effective.sets,
       repMin: effective.repMin,
       repMax: effective.repMax,
@@ -442,7 +328,7 @@ export const loadSessionDetail = async (sessionId: number): Promise<SessionDetai
       restSec: effective.restSec,
       lastTimeDisplay,
       progressionHint: progression.hint,
-      sets: sets.map((s) => ({
+      sets: (setsByLog.get(log.id) ?? []).map((s) => ({
         id: s.id,
         setIndex: s.setIndex,
         weight: s.weight,
@@ -453,14 +339,8 @@ export const loadSessionDetail = async (sessionId: number): Promise<SessionDetai
         skipReason: s.skipReason,
         completedAt: s.completedAt,
       })),
-    })
-  }
-
-  const timer = await db
-    .select()
-    .from(restTimers)
-    .where(eq(restTimers.sessionId, sessionId))
-    .limit(1)
+    }
+  })
 
   return {
     session,
@@ -571,19 +451,10 @@ export const skipSet = async (setId: number, reason: SkipReason) => {
 
 export const skipExercise = async (exerciseLogId: number, reason: SkipReason) => {
   const db = getDb()
-  const sets = await db
-    .select()
-    .from(setLogs)
-    .where(eq(setLogs.exerciseLogId, exerciseLogId))
-
-  for (const s of sets) {
-    if (s.status === 'pending') {
-      await db
-        .update(setLogs)
-        .set({ status: 'skipped', skipReason: reason, completedAt: nowIso() })
-        .where(eq(setLogs.id, s.id))
-    }
-  }
+  await db
+    .update(setLogs)
+    .set({ status: 'skipped', skipReason: reason, completedAt: nowIso() })
+    .where(and(eq(setLogs.exerciseLogId, exerciseLogId), eq(setLogs.status, 'pending')))
 
   await db
     .update(exerciseLogs)
@@ -637,20 +508,12 @@ export const adjustRestTimer = async (sessionId: number, deltaSec: number) => {
 
 export const countUnresolvedSets = async (sessionId: number): Promise<number> => {
   const db = getDb()
-  const logs = await db
-    .select()
-    .from(exerciseLogs)
-    .where(eq(exerciseLogs.sessionId, sessionId))
-
-  let count = 0
-  for (const log of logs) {
-    const sets = await db
-      .select()
-      .from(setLogs)
-      .where(eq(setLogs.exerciseLogId, log.id))
-    count += sets.filter((s) => s.status === 'pending').length
-  }
-  return count
+  const pending = await db
+    .select({ id: setLogs.id })
+    .from(setLogs)
+    .innerJoin(exerciseLogs, eq(exerciseLogs.id, setLogs.exerciseLogId))
+    .where(and(eq(exerciseLogs.sessionId, sessionId), eq(setLogs.status, 'pending')))
+  return pending.length
 }
 
 export const finishWorkoutSession = async (sessionId: number, note?: string) => {
@@ -677,16 +540,14 @@ export const finishWorkoutSession = async (sessionId: number, note?: string) => 
   // Progression is derived from completed-session history (which now includes
   // this session); progression_state only caches the latest result.
   if (countsTowardProgression(detail.session.mode)) {
+    const history = await loadTemplateHistory(detail.session.workoutTemplateId)
     for (const ex of detail.exercises) {
       if (ex.status === 'skipped') continue
 
       const doneSets = ex.sets.filter((s) => s.status === 'done' && !s.isExtra)
       if (doneSets.length === 0) continue
 
-      const result = await getProgressionForSlot(
-        ex.exerciseSlotId,
-        detail.session.workoutTemplateId,
-      )
+      const result = progressionFromHistory(history, ex.slot)
 
       await db
         .insert(progressionState)
@@ -734,35 +595,24 @@ export const abandonSession = async (sessionId: number) => {
 
 export const resolveStaleSession = async (sessionId: number) => {
   const db = getDb()
-  const logs = await db
-    .select()
+  const sessionLogIds = db
+    .select({ id: exerciseLogs.id })
     .from(exerciseLogs)
     .where(eq(exerciseLogs.sessionId, sessionId))
 
-  for (const log of logs) {
-    const sets = await db
-      .select()
-      .from(setLogs)
-      .where(eq(setLogs.exerciseLogId, log.id))
-    for (const s of sets) {
-      if (s.status === 'pending') {
-        await db
-          .update(setLogs)
-          .set({
-            status: 'skipped',
-            skipReason: 'no_time',
-            completedAt: nowIso(),
-          })
-          .where(eq(setLogs.id, s.id))
-      }
-    }
-    if (log.status === 'pending' || log.status === 'partial') {
-      await db
-        .update(exerciseLogs)
-        .set({ status: 'skipped', skipReason: 'no_time' })
-        .where(eq(exerciseLogs.id, log.id))
-    }
-  }
+  await db
+    .update(setLogs)
+    .set({ status: 'skipped', skipReason: 'no_time', completedAt: nowIso() })
+    .where(and(inArray(setLogs.exerciseLogId, sessionLogIds), eq(setLogs.status, 'pending')))
+  await db
+    .update(exerciseLogs)
+    .set({ status: 'skipped', skipReason: 'no_time' })
+    .where(
+      and(
+        eq(exerciseLogs.sessionId, sessionId),
+        inArray(exerciseLogs.status, ['pending', 'partial']),
+      ),
+    )
 
   return finishWorkoutSession(sessionId)
 }
@@ -798,19 +648,56 @@ export const getHomeExercisePreviews = async (code: WorkoutTemplateCode) => {
   const template = await getTemplateByCode(code)
   if (!template) return []
 
-  const previews = []
-  for (const slot of template.slots) {
-    const progression = await getProgressionForSlot(slot.id, template.id)
-    previews.push({
+  const history = await loadTemplateHistory(template.id)
+  return template.slots.map((slot) => {
+    const progression = progressionFromHistory(history, slot)
+    return {
       name: slot.exercise.name,
       slotId: slot.id,
       status: progression.status as ProgressionStatus,
       suggestedWeight: progression.suggestedWeight,
       hint: progression.hint,
       weightType: slot.exercise.weightType,
+    }
+  })
+}
+
+/** Best estimated 1RM per completed session of a slot, oldest log first. */
+export const getExerciseE1rmPoints = async (
+  slotId: number,
+): Promise<{ week: string; e1rm: number }[]> => {
+  const db = getDb()
+  const rows = await db
+    .select({
+      logId: exerciseLogs.id,
+      weekNumber: workoutSessions.weekNumber,
+      weight: setLogs.weight,
+      reps: setLogs.reps,
     })
+    .from(exerciseLogs)
+    .innerJoin(workoutSessions, eq(workoutSessions.id, exerciseLogs.sessionId))
+    .innerJoin(setLogs, eq(setLogs.exerciseLogId, exerciseLogs.id))
+    .where(
+      and(
+        eq(exerciseLogs.exerciseSlotId, slotId),
+        eq(workoutSessions.status, 'completed'),
+        eq(setLogs.status, 'done'),
+      ),
+    )
+    .orderBy(asc(exerciseLogs.id))
+
+  const bestByLog = new Map<number, { weekNumber: number; best: number }>()
+  for (const r of rows) {
+    const e1rm = estimateE1rm(r.weight ?? 0, r.reps ?? 0)
+    const point = bestByLog.get(r.logId)
+    if (!point) bestByLog.set(r.logId, { weekNumber: r.weekNumber, best: e1rm })
+    else point.best = Math.max(point.best, e1rm)
   }
-  return previews
+
+  return [...bestByLog.values()].map(({ weekNumber, best }) => ({
+    week: `T${weekNumber}`,
+    e1rm: Math.round(best * 10) / 10,
+  }))
 }
 
 export const isSessionStale = (session: WorkoutSession): boolean => {
