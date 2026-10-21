@@ -1,0 +1,50 @@
+name: Prioritizer
+
+on:
+  # Раз на годину як «пульс» (хвилина 17 — щоб не потрапляти в пік на :00).
+  schedule:
+    - cron: "17 * * * *"
+  # Ручний запуск: Actions → Prioritizer → Run workflow.
+  workflow_dispatch:
+  # Одразу після того, як Human Approval Gate перевірив твій `approved`.
+  workflow_run:
+    workflows: ["Human Approval Gate"]
+    types: [completed]
+  # Звільнилось місце або змінилась оцінка.
+  issues:
+    types: [closed, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: prioritizer
+  cancel-in-progress: false
+
+jobs:
+  prioritize:
+    # На події issues реагуємо лише на важливі мітки. `approved` навмисно не тут:
+    # його обробляє workflow_run після перевірки, щоб не взяти в чергу неперевірене.
+    if: >-
+      github.event_name != 'issues' ||
+      github.event.action == 'closed' ||
+      github.event.action == 'reopened' ||
+      contains(fromJSON('["in-progress","ready-for-dev","needs-split","P1","P2","P3"]'), github.event.label.name)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Build queue
+        uses: actions/github-script@v7
+        env:
+          PIPELINE_ENABLED: ${{ vars.PIPELINE_ENABLED }}
+          WIP_LIMIT: ${{ vars.WIP_LIMIT }}
+          AUTO_PROMOTE: ${{ vars.AUTO_PROMOTE }}
+        with:
+          script: |
+            const run = require('./.github/scripts/prioritize.js');
+            await run({ github, context, core });

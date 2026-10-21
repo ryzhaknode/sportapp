@@ -1,0 +1,39 @@
+name: Human Approval Gate
+
+# Без AI і без витрат на Клода: перевіряє, хто і що затвердив, і прибирає мітки.
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  approve:
+    if: github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check and finalize approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          SENDER: ${{ github.event.sender.login }}
+          OWNER: ${{ github.repository_owner }}
+          # Тіло issue передаємо через env, а НЕ вставляємо в скрипт напряму (захист від ін'єкцій).
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          if [ "$SENDER" != "$OWNER" ]; then
+            gh issue edit "$NUMBER" --remove-label approved
+            gh issue comment "$NUMBER" --body "⛔ Мітку \`approved\` може ставити лише @$OWNER. Знято."
+            exit 0
+          fi
+
+          if ! printf '%s' "$BODY" | grep -q "Acceptance criteria"; then
+            gh issue edit "$NUMBER" --remove-label approved
+            gh issue comment "$NUMBER" --body "⚠️ Немає acceptance criteria — спочатку повісь \`needs-refinement\`."
+            exit 0
+          fi
+
+          gh issue edit "$NUMBER" --remove-label awaiting-approval || true
+          gh issue comment "$NUMBER" --body "✅ Затверджено @$SENDER. Задача готова до черги Prioritizer."

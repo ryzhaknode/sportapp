@@ -1,0 +1,52 @@
+name: Kill Switch
+
+# Червона кнопка. Запуск: Actions → Kill Switch → Run workflow
+# (працює і з мобільного застосунку GitHub).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "stop — зупинити конвеєр, resume — запустити знову"
+        type: choice
+        options: [stop, resume]
+        default: stop
+
+permissions:
+  actions: write
+
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Flip switch
+        env:
+          # Fine-grained PAT: цей репо, Variables: Read and write, Actions: Read and write.
+          GH_TOKEN: ${{ secrets.KILL_SWITCH_PAT }}
+          GH_REPO: ${{ github.repository }}
+          MODE: ${{ inputs.mode }}
+          SELF: ${{ github.run_id }}
+        run: |
+          if [ "$MODE" = "stop" ]; then
+            gh variable set PIPELINE_ENABLED --body false
+            echo "🔴 PIPELINE_ENABLED=false"
+
+            # Скасувати все, що вже біжить або чекає в черзі (крім цього запуску).
+            for status in in_progress queued; do
+              gh run list --status "$status" --limit 100 --json databaseId -q '.[].databaseId' |
+                while read -r id; do
+                  [ "$id" = "$SELF" ] && continue
+                  gh run cancel "$id" && echo "  скасовано run $id" || true
+                done
+            done
+            echo "### 🔴 Конвеєр зупинено" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh variable set PIPELINE_ENABLED --body true
+            echo "### 🟢 Конвеєр відновлено" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Refresh queue board
+        env:
+          GH_TOKEN: ${{ secrets.KILL_SWITCH_PAT }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run prioritizer.yml || true
