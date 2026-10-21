@@ -277,7 +277,7 @@ describe('progression across sessions', () => {
     expect(rows.every((r) => r.lastStatus === 'increase_weight')).toBe(true)
   })
 
-  it('after increase_weight the next session suggests the new weight but prefills the old one', async () => {
+  it('after increase_weight the next session is prefilled with the new weight at repMin', async () => {
     await runSession('A', (ex) => ({ weight: startWeightOf(ex), reps: ex.repMax, rir: ex.rirMin }))
 
     const detail = await loadDetail(await startWorkoutSession('A', 80))
@@ -285,18 +285,12 @@ describe('progression across sessions', () => {
       const increased = roundToIncrement(startWeightOf(ex) + ex.slot.increment, ex.slot.increment)
       expect(ex.suggestedStatus).toBe('increase_weight')
       expect(ex.suggestedWeight).toBe(increased)
-      // SUSPECTED BUG (current behaviour): set prefill copies the last session's
-      // sets (weight and reps) instead of suggestedWeight/suggestedRepTarget, and
-      // the workout form shows `set.weight ?? suggestedWeight`, so it opens on
-      // the old weight at repMax. See the todo below.
       for (const set of ex.sets) {
-        expect(set.weight).toBe(startWeightOf(ex))
-        expect(set.reps).toBe(ex.repMax)
+        expect(set.weight).toBe(increased)
+        expect(set.reps).toBe(ex.repMin)
       }
     }
   })
-
-  it.todo('after increase_weight / decrease_weight, new sets are prefilled with suggestedWeight')
 
   it('three sessions with the same weight and reps → stall → decrease_weight', async () => {
     const sameEveryTime = (ex: ExerciseLogRow): SetValues => ({
@@ -326,6 +320,15 @@ describe('progression across sessions', () => {
       stallCount: 0,
       lastStatus: 'decrease_weight',
     })
+    // The next session opens on the reduced weight at repMin.
+    const detail = await loadDetail(await startWorkoutSession('A', 80))
+    for (const ex of detail.exercises) {
+      const decreased = decreaseWeight(startWeightOf(ex), ex.slot.increment)
+      for (const set of ex.sets) {
+        expect(set.weight).toBe(decreased)
+        expect(set.reps).toBe(ex.repMin)
+      }
+    }
   })
 
   it('a deload-week session does not change the progression result', async () => {
