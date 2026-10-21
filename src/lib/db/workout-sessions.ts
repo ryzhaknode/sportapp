@@ -21,6 +21,7 @@ import {
   groupHistoryBySlot,
   pickLastCompletedSets,
   pickLastTimeDisplay,
+  prefillSetValues,
   toProgressionHistory,
   type SlotHistory,
 } from '@/lib/progression/history'
@@ -231,22 +232,18 @@ export const startWorkoutSession = async (
     // RETURNING order isn't guaranteed in SQLite, so match logs back by slot.
     const logIdBySlot = new Map(logs.map((l) => [l.exerciseSlotId, l.id]))
 
-    const sets = plans.flatMap(({ slot, effective, progression, lastSets }) => {
-      const fallbackWeight = progression.suggestedWeight ?? slot.startWeight
-      const fallbackReps = progression.suggestedRepTarget
-      return Array.from({ length: effective.sets }, (_, si) => {
-        const fromLast = lastSets?.[si] ?? lastSets?.[lastSets.length - 1]
-        return {
-          exerciseLogId: logIdBySlot.get(slot.id)!,
-          setIndex: si,
-          weight: fromLast?.weight ?? fallbackWeight,
-          reps: fromLast?.reps ?? fallbackReps,
-          rir: fromLast?.rir ?? effective.rirMin,
-          status: 'pending' as const,
-          isExtra: false,
-        }
-      })
-    })
+    const sets = plans.flatMap(({ slot, effective, progression, lastSets }) =>
+      Array.from({ length: effective.sets }, (_, si) => ({
+        exerciseLogId: logIdBySlot.get(slot.id)!,
+        setIndex: si,
+        ...prefillSetValues(si, lastSets, progression, {
+          startWeight: slot.startWeight,
+          rirMin: effective.rirMin,
+        }),
+        status: 'pending' as const,
+        isExtra: false,
+      })),
+    )
     if (sets.length > 0) await db.insert(setLogs).values(sets)
   }
 
