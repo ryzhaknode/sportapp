@@ -33,9 +33,10 @@
 ```bash
 npm test            # Vitest
 npm run lint        # ESLint (має бути без помилок)
-npx tsc --noEmit    # типи
+npm run typecheck   # next typegen + tsc --noEmit
 npm run dev         # локально на file:./data/workouts.db (або Turso з .env)
 ```
+CI (`.github/workflows/ci.yml`) на кожен PR і push у `main` запускає lint, typecheck і тести.
 
 ## Конвеєр issues
 Triage → 👤 `needs-refinement` → Refinement → 👤 `approved` → Prioritizer (без AI) → `ready-for-dev`.

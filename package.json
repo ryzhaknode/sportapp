@@ -12,6 +12,7 @@
     "build:vercel": "drizzle-kit migrate && next build",
     "mobile:url": "node scripts/set-mobile-url.mjs",
     "test": "vitest run",
+    "typecheck": "next typegen && tsc --noEmit",
     "seed:mock": "tsx scripts/seed-mock.ts"
   },
   "dependencies": {
