@@ -1,38 +1,13 @@
 #!/usr/bin/env bash
-# Створює мітки та 8 тестових issues для перевірки Triage Agent (dedup, needs-info).
+# Створює мітки (scripts/github-labels.sh) та 8 тестових issues для перевірки Triage Agent (dedup, needs-info).
 # Потрібно: gh auth login, права на repo.
 
 set -euo pipefail
 
 REPO="${REPO:-ryzhaknode/sportapp}"
 
-create_label() {
-  local name="$1"
-  local color="$2"
-  local description="${3:-}"
-  if gh label list --repo "$REPO" --search "$name" --json name --jq ".[] | select(.name==\"$name\")" | grep -q .; then
-    echo "Label exists: $name"
-  else
-    gh label create "$name" --repo "$REPO" --color "$color" --description "$description" || true
-    echo "Created label: $name"
-  fi
-}
-
 echo "==> Labels"
-create_label "source:user" "1D76DB" "Report from user form"
-create_label "source:dev" "5319E7" "Report from dev form"
-create_label "source:auto" "0E8A16" "Auto-reported (e.g. Sentry)"
-create_label "type:bug" "D73A4A" "Bug"
-create_label "type:feature" "A2EEEF" "Feature request"
-create_label "type:question" "D4C5F9" "Question"
-create_label "possible-duplicate" "FBCA04" "Possible duplicate"
-create_label "reproduced" "0E8A16" "Likely reproduced in code/tests"
-create_label "needs-info" "B60205" "Missing reproduction info"
-create_label "needs-refinement" "C5DEF5" "Ready for Refinement Agent"
-create_label "area:workout" "F9D0C4" "Workout flow"
-create_label "area:progression" "BFDADC" "Progression logic"
-create_label "area:db" "006B75" "Database / Turso"
-create_label "area:ui" "E99695" "UI / mobile"
+REPO="$REPO" bash "$(dirname "$0")/github-labels.sh"
 
 echo "==> Test issues"
 

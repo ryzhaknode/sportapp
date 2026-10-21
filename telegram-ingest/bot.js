@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { Bot } from 'grammy'
+import { registerAdminCommands } from './admin.js'
 
 const MIN_TEXT_LENGTH = 15
 const MAX_ISSUES_PER_HOUR = 5
@@ -19,8 +20,8 @@ const env = (name) => {
   return value.trim()
 }
 
-const parseAllowedUserIds = () => {
-  const raw = process.env.ALLOWED_USER_IDS?.trim() ?? ''
+const parseUserIds = (name) => {
+  const raw = process.env[name]?.trim() ?? ''
   if (!raw) return new Set()
   return new Set(
     raw
@@ -31,6 +32,8 @@ const parseAllowedUserIds = () => {
       .filter((n) => Number.isFinite(n)),
   )
 }
+
+const parseAllowedUserIds = () => parseUserIds('ALLOWED_USER_IDS')
 
 const REPORTER_SALT = env('REPORTER_SALT')
 const GITHUB_TOKEN = env('GITHUB_TOKEN')
@@ -47,7 +50,7 @@ const reporterTag = (userId) => {
 const neutralize = (text) => text.replace(/@/g, '@\u200B')
 
 const isAllowed = (userId) => {
-  if (allowedUserIds.size === 0) return false
+  if (allowedUserIds.size === 0) return true
   return allowedUserIds.has(userId)
 }
 
@@ -103,34 +106,48 @@ const buildIssueBody = (kind, userId, text) => {
   ].join('\n')
 }
 
+const githubHeaders = {
+  Authorization: `Bearer ${GITHUB_TOKEN}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  'Content-Type': 'application/json',
+}
+
+const postIssue = async (owner, repo, payload) => {
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+    method: 'POST',
+    headers: githubHeaders,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
+  })
+  const errText = res.ok ? null : await res.text()
+  return { res, errText }
+}
+
 const createIssue = async (kind, userId, text) => {
   const [owner, repo] = GITHUB_REPO.split('/')
   if (!owner || !repo) {
     throw new Error('GITHUB_REPO must be owner/repo')
   }
 
-  const labels = kind === 'idea' ? ['source:user'] : ['source:user']
+  const base = {
+    title: titleFromText(kind, text),
+    body: buildIssueBody(kind, userId, text),
+  }
 
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GITHUB_TOKEN}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      title: titleFromText(kind, text),
-      body: buildIssueBody(kind, userId, text),
-      labels,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  })
+  let { res, errText } = await postIssue(owner, repo, { ...base, labels: ['source:user'] })
+
+  if (!res.ok && res.status === 422 && errText?.includes('label')) {
+    console.warn('GitHub: label source:user missing, creating issue without labels')
+    ;({ res, errText } = await postIssue(owner, repo, base))
+  }
 
   if (!res.ok) {
-    const errText = await res.text()
     console.error('GitHub API error', res.status, errText)
-    throw new Error(`GitHub ${res.status}`)
+    const err = new Error(`GitHub ${res.status}`)
+    err.status = res.status
+    err.detail = errText
+    throw err
   }
 
   return /** @type {{ html_url: string, number: number }} */ (await res.json())
@@ -138,11 +155,17 @@ const createIssue = async (kind, userId, text) => {
 
 const bot = new Bot(TELEGRAM_TOKEN)
 
+// Kill switch (/stop, /resume, /pipeline) — лише якщо задано окремий токен і хоча б один адмін.
+const GH_ADMIN_TOKEN = process.env.GH_ADMIN_TOKEN?.trim() ?? ''
+const adminIds = parseUserIds('ADMIN_USER_IDS')
+const adminEnabled = GH_ADMIN_TOKEN !== '' && adminIds.size > 0
+if (adminEnabled) {
+  registerAdminCommands(bot, { token: GH_ADMIN_TOKEN, repo: GITHUB_REPO, adminIds })
+}
+
 const submit = async (ctx, kind, userId, text) => {
   if (!isAllowed(userId)) {
-    await ctx.reply(
-      'Доступ закритий. Надішли /myid власнику бота, щоб додали тебе до ALLOWED_USER_IDS.',
-    )
+    await ctx.reply('Доступ закритий для цього акаунта.')
     return
   }
 
@@ -165,6 +188,12 @@ const submit = async (ctx, kind, userId, text) => {
     await ctx.reply(`Збережено: ${issue.html_url}`)
   } catch (err) {
     console.error('createIssue failed', err)
+    if (err.status === 403) {
+      await ctx.reply(
+        'GitHub відхилив запит (403). Перевір GITHUB_TOKEN: fine-grained PAT з правом Issues → Read and write для ryzhaknode/sportapp.',
+      )
+      return
+    }
     await ctx.reply('Не вдалося зберегти звернення. Спробуй пізніше.')
   }
 }
@@ -251,7 +280,12 @@ const main = async () => {
     { command: 'myid', description: 'Мій Telegram ID' },
   ])
 
-  console.log(`telegram-ingest starting; repo=${GITHUB_REPO}; allowed=${allowedUserIds.size} users`)
+  const access =
+    allowedUserIds.size === 0
+      ? 'open (no ALLOWED_USER_IDS whitelist)'
+      : `whitelist: ${allowedUserIds.size} user(s)`
+  const admin = adminEnabled ? `on (${adminIds.size} admin(s))` : 'off'
+  console.log(`telegram-ingest starting; repo=${GITHUB_REPO}; access=${access}; kill switch=${admin}`)
   await bot.start()
 }
 

@@ -40,30 +40,31 @@ const createLibsqlClient = (): Client => {
 }
 
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null
-let migrated = false
+let migration: Promise<void> | null = null
 
-const runMigrationsIfNeeded = async (
-  db: ReturnType<typeof drizzle<typeof schema>>,
-): Promise<void> => {
-  if (migrated) return
-  if (process.env.SKIP_DB_MIGRATE === '1') {
-    migrated = true
-    return
-  }
-  const migrationsFolder = path.join(process.cwd(), 'drizzle')
-  if (!fs.existsSync(migrationsFolder)) {
-    migrated = true
-    return
-  }
-  await migrate(db, { migrationsFolder })
-  migrated = true
+// Memoised so concurrent callers (getDb's background run + ensureDbMigrated)
+// share one migration instead of racing on a fresh database.
+const runMigrationsIfNeeded = (db: ReturnType<typeof drizzle<typeof schema>>): Promise<void> => {
+  migration ??= (async () => {
+    if (process.env.SKIP_DB_MIGRATE === '1') return
+    const migrationsFolder = path.join(process.cwd(), 'drizzle')
+    if (!fs.existsSync(migrationsFolder)) return
+    await migrate(db, { migrationsFolder })
+  })()
+  return migration
 }
+
+/** `DB_LOG=1` друкує кожен SQL-запит — щоб рахувати запити на сторінку. */
+const queryLogger =
+  process.env.DB_LOG === '1'
+    ? { logQuery: (query: string) => console.debug(`[db] ${query}`) }
+    : undefined
 
 export const getDb = () => {
   if (dbInstance) return dbInstance
 
   const client = createLibsqlClient()
-  dbInstance = drizzle(client, { schema })
+  dbInstance = drizzle(client, { schema, logger: queryLogger })
 
   if (!process.env.VERCEL) {
     void runMigrationsIfNeeded(dbInstance)

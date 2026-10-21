@@ -40,12 +40,10 @@ cd telegram-ingest
 npm install
 cp .env.example .env
 # Заповни TELEGRAM_TOKEN, GITHUB_TOKEN, REPORTER_SALT (випадковий рядок)
-# ALLOWED_USER_IDS поки порожній — бот відмовляє всім (закритий режим)
 npm run dev
 ```
 
-1. Надішли боту **`/myid`**, скопіюй ID у **`ALLOWED_USER_IDS`** у `.env` (через кому, якщо кілька людей).
-2. Перезапусти бота.
+Опційно **`ALLOWED_USER_IDS`**: порожньо — писати можуть усі; якщо вказати ID через кому — лише ці акаунти (`/myid` для свого числа).
 
 **Production 24/7 (опційно):** VPS + `pm2 start npm --name tg-ingest -- start`, або Docker `node:22-alpine` з `restart: always`. GitHub webhooks для сповіщень у TG — окремий етап (потрібна публічна URL).
 
@@ -53,7 +51,7 @@ npm run dev
 
 - Токени **тільки** в локальному `.env`, ніколи в git.
 - Issues створюються **вашим** PAT → автор = owner → triage проходить `author_association`.
-- Хто може писати боту — лише **`ALLOWED_USER_IDS`**.
+- Опційний whitelist **`ALLOWED_USER_IDS`** (порожньо = відкрито для всіх).
 - Текст neutralize ламає `@` (zero-width space), щоб не пінгати людей / `@claude`.
 - Репортер у issue: псевдонім `tg-xxxxxxxx` (HMAC + `REPORTER_SALT`), без імені Telegram.
 
@@ -66,7 +64,7 @@ npm run dev
 | 3 | «не працює» (<15 символів) | Відмова в Telegram, **без** issue |
 | 4 | 6 звернень за годину | 6-те: ліміт у Telegram |
 | 5 | Текст з `@claude` | Issue без активного ping |
-| 6 | Повідомлення з акаунта не з whitelist | Відмова |
+| 6 | Повідомлення з акаунта не з whitelist (лише якщо `ALLOWED_USER_IDS` задано) | Відмова |
 | 7 | Невірний `GITHUB_TOKEN` | «Не вдалося зберегти», процес живий |
 | 8 | Ctrl+C, знову `npm run dev` | Polling підхоплює повідомлення, надіслані офлайн |
 
