@@ -4,6 +4,7 @@ import {
   groupHistoryBySlot,
   pickLastCompletedSets,
   pickLastTimeDisplay,
+  prefillSetValues,
   toProgressionHistory,
   type HistoryRow,
   type HistorySet,
@@ -158,5 +159,39 @@ describe('pickLastTimeDisplay', () => {
     expect(
       pickLastTimeDisplay([entry({ sets: [] }), entry({ sets: [set(0)] })], 'barbell'),
     ).toBeNull()
+  })
+})
+
+describe('prefillSetValues', () => {
+  const lastSets = [
+    { weight: 60, reps: 12, rir: 2 },
+    { weight: 60, reps: 11, rir: 1 },
+  ]
+  const defaults = { startWeight: 40, rirMin: 2 }
+
+  it('uses the new weight at repMin after increase_weight', () => {
+    const progression = { status: 'increase_weight' as const, suggestedWeight: 62.5, suggestedRepTarget: 8 }
+    expect(prefillSetValues(0, lastSets, progression, defaults)).toEqual({ weight: 62.5, reps: 8, rir: 2 })
+    expect(prefillSetValues(1, lastSets, progression, defaults)).toEqual({ weight: 62.5, reps: 8, rir: 1 })
+  })
+
+  it('uses the lowered weight at repMin after decrease_weight', () => {
+    const progression = { status: 'decrease_weight' as const, suggestedWeight: 55, suggestedRepTarget: 8 }
+    expect(prefillSetValues(2, lastSets, progression, defaults)).toEqual({ weight: 55, reps: 8, rir: 1 })
+  })
+
+  it('repeats last per-set values when the weight stays', () => {
+    const progression = { status: 'add_reps' as const, suggestedWeight: 60, suggestedRepTarget: 13 }
+    expect(prefillSetValues(0, lastSets, progression, defaults)).toEqual({ weight: 60, reps: 12, rir: 2 })
+    expect(prefillSetValues(3, lastSets, progression, defaults)).toEqual({ weight: 60, reps: 11, rir: 1 })
+  })
+
+  it('falls back to the suggestion, then start weight, without history', () => {
+    expect(
+      prefillSetValues(0, null, { status: 'first', suggestedWeight: null, suggestedRepTarget: 8 }, defaults),
+    ).toEqual({ weight: 40, reps: 8, rir: 2 })
+    expect(
+      prefillSetValues(0, null, { status: 'repeat', suggestedWeight: 50, suggestedRepTarget: 9 }, defaults),
+    ).toEqual({ weight: 50, reps: 9, rir: 2 })
   })
 })

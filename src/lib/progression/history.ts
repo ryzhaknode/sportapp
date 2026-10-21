@@ -1,7 +1,11 @@
 import type { ExerciseSlot, SessionMode } from '@/lib/db/schema'
 import type { WeightType } from '@/lib/program/types'
 import { countsTowardProgression } from '@/lib/program/week-cycle'
-import type { ExerciseLogSnapshot, ProgressionHistoryEntry } from '@/lib/progression/evaluate'
+import type {
+  ExerciseLogSnapshot,
+  ProgressionHistoryEntry,
+  ProgressionResult,
+} from '@/lib/progression/evaluate'
 import { formatLastTimeDisplay } from '@/lib/workout-last-display'
 
 export interface HistorySet {
@@ -145,6 +149,31 @@ export const pickLastCompletedSets = (entries: SlotHistoryEntry[]): LastSetValue
     }))
   }
   return null
+}
+
+/**
+ * Prefill for planned set `setIndex` of a new session. A weight change resets
+ * the set to the progression's new weight at repMin; otherwise repeat what was
+ * done last time (falling back to the progression's suggestion).
+ */
+export const prefillSetValues = (
+  setIndex: number,
+  lastSets: LastSetValues[] | null,
+  progression: Pick<ProgressionResult, 'status' | 'suggestedWeight' | 'suggestedRepTarget'>,
+  defaults: { startWeight: number | null; rirMin: number },
+): { weight: number | null; reps: number; rir: number } => {
+  const fallbackWeight = progression.suggestedWeight ?? defaults.startWeight
+  const fromLast = lastSets?.[setIndex] ?? lastSets?.[lastSets.length - 1]
+  const rir = fromLast?.rir ?? defaults.rirMin
+
+  if (progression.status === 'increase_weight' || progression.status === 'decrease_weight') {
+    return { weight: fallbackWeight, reps: progression.suggestedRepTarget, rir }
+  }
+  return {
+    weight: fromLast?.weight ?? fallbackWeight,
+    reps: fromLast?.reps ?? progression.suggestedRepTarget,
+    rir,
+  }
 }
 
 /** "Last time" line from the latest session where the exercise wasn't skipped. */
