@@ -43,8 +43,6 @@ cp .env.example .env
 ```env
 TURSO_DATABASE_URL=libsql://sportapp-gym-xxxxx.turso.io
 TURSO_AUTH_TOKEN=eyJhbG...
-MOBILE_URL=https://ТВІЙ-ПРОЄКТ.vercel.app
-NEXT_PUBLIC_MOBILE_URL=https://ТВІЙ-ПРОЄКТ.vercel.app
 ```
 
 `DATABASE_URL` **не потрібен**, якщо задано `TURSO_*`.
@@ -98,8 +96,6 @@ turso db shell sportapp-gym < /tmp/sportapp-dump.sql
    |------|--------|
    | `TURSO_DATABASE_URL` | `libsql://...` |
    | `TURSO_AUTH_TOKEN` | `eyJ...` |
-   | `MOBILE_URL` | `https://xxx.vercel.app` |
-   | `NEXT_PUBLIC_MOBILE_URL` | те саме |
 
 3. **Build Command** (Settings → General):
 

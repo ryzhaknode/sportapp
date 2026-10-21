@@ -46,7 +46,6 @@ CLOUDFLARE_TUNNEL_TOKEN=eyJ...твій_токен...
 ### Крок 3 — Запуск
 
 ```bash
-npm run mobile:url          # LAN URL для QR вдома (опційно)
 docker compose --profile tunnel up --build -d
 ```
 
@@ -55,7 +54,7 @@ docker compose --profile tunnel up --build -d
 ### Крок 4 — Телефон
 
 1. Відкрий **HTTPS URL з тунелю** (не `192.168...`).
-2. **Налаштування → Можеш оновити `MOBILE_URL`** на цей HTTPS URL (для QR), або просто збережи закладку / PWA.
+2. Збережи закладку / PWA.
 3. Додай на домашній екран — PWA працює з **HTTPS**, стабільніше ніж `http://192.168...`.
 
 ---
