@@ -1,7 +1,7 @@
 import { asc, desc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { bodyWeightLogs } from '@/lib/db/schema'
-import { formatDateLocal } from '@/lib/utils'
+import { todayInAppTz } from '@/lib/utils'
 
 const nowIso = (): string => new Date().toISOString()
 
@@ -76,7 +76,7 @@ export const getBodyWeightEntries = async (limit = 30) => {
 }
 
 export const getTodayMorningWeight = async (): Promise<number | null> => {
-  const today = formatDateLocal(new Date())
+  const today = todayInAppTz()
   const db = getDb()
   const rows = await db
     .select()

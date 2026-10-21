@@ -30,7 +30,7 @@ import {
   getWeekContext,
 } from '@/lib/program/week-cycle'
 import { getWeekNumber } from '@/lib/program/schedule'
-import { formatDateLocal } from '@/lib/utils'
+import { todayInAppTz } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
 import type { WeightType } from '@/lib/program/types'
 import { estimateE1rm } from '@/lib/progression/weight'
@@ -122,7 +122,7 @@ export const progressionFromHistory = (history: SlotHistory, slot: ExerciseSlot)
   evaluateProgressionHistory({
     slot,
     history: toProgressionHistory(history.get(slot.id) ?? [], slot),
-    today: formatDateLocal(new Date()),
+    today: todayInAppTz(),
   })
 
 export const getProgressionForSlot = async (slotId: number, templateId: number) => {
@@ -140,7 +140,7 @@ export const getTodayCompletedSessionForCode = async (
   const template = await getTemplateByCode(code)
   if (!template) return null
 
-  const today = formatDateLocal(new Date())
+  const today = todayInAppTz()
   const db = getDb()
   const rows = await db
     .select()
@@ -184,7 +184,7 @@ export const startWorkoutSession = async (
     throw new Error('INVALID_BODY_WEIGHT')
   }
 
-  const today = formatDateLocal(new Date())
+  const today = todayInAppTz()
   const alreadyToday = await getTodayCompletedSessionForCode(code)
   if (alreadyToday) {
     throw new Error('WORKOUT_ALREADY_COMPLETED_TODAY')

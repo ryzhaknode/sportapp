@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
+import { todayInAppTz } from '@/lib/utils'
 
 type ErrorSection = 'program' | 'timer' | 'export'
 
@@ -79,7 +80,7 @@ export const SettingsForm = ({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gym-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `gym-tracker-backup-${todayInAppTz()}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -97,7 +98,7 @@ export const SettingsForm = ({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gym-sessions-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `gym-sessions-${todayInAppTz()}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }

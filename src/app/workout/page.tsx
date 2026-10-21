@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getInProgressSession } from '@/lib/db/workout-sessions'
 import { getNextWorkoutCode } from '@/lib/program/schedule'
-import { formatDateLocal } from '@/lib/utils'
+import { todayInAppTz } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +11,7 @@ export default async function WorkoutIndexPage() {
     redirect(`/workout/${inProgress.id}`)
   }
 
-  const today = formatDateLocal(new Date())
+  const today = todayInAppTz()
   const code = getNextWorkoutCode(today)
   redirect(`/?start=${code}`)
 }

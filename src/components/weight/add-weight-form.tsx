@@ -8,11 +8,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { parseDecimalKg, sanitizeDecimalKgInput } from '@/lib/decimal-kg-input'
 import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
+import { todayInAppTz } from '@/lib/utils'
 
 export const AddWeightForm = () => {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(todayInAppTz)
   const [weight, setWeight] = useState('')
   const [error, setError] = useState<string | null>(null)
 

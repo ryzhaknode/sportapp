@@ -23,11 +23,10 @@ Build на Vercel: `npm run build:vercel`.
 ### Локальна Wi‑Fi (Mac у тій же мережі)
 
 ```bash
-npm run mobile:url
 docker compose up --build -d
 ```
 
-Відкрий URL з `.env` у браузері телефону. Додай на домашній екран (PWA).
+Відкрий `http://<IP Mac у мережі>:3000` у браузері телефону. Додай на домашній екран (PWA).
 
 ### LTE / мобільний інternet (Mac вдома увімкнений)
 

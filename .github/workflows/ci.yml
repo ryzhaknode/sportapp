@@ -1,0 +1,38 @@
+name: CI
+
+# Звичайна перевірка коду (не агент), тому без kill switch PIPELINE_ENABLED.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `next typegen` генерує глобальні PageProps/LayoutProps у .next/types.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
