@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { refresh, revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { SkipReason, WorkoutTemplateCode } from '@/lib/db/schema'
 import {
@@ -25,6 +25,15 @@ const revalidateWorkout = () => {
   revalidatePath('/weight')
 }
 
+/**
+ * For actions called from the open workout page: re-render it in the action's
+ * own response instead of a second client `router.refresh()` round trip.
+ */
+const refreshWorkout = () => {
+  revalidateWorkout()
+  refresh()
+}
+
 export const actionStartWorkout = async (code: WorkoutTemplateCode, bodyWeightKg: number) => {
   const sessionId = await startWorkoutSession(code, bodyWeightKg)
   revalidateWorkout()
@@ -39,35 +48,35 @@ export const actionCompleteSet = async (input: {
   rir: number
 }) => {
   const result = await completeSet(input)
-  revalidateWorkout()
+  refreshWorkout()
   return result
 }
 
 export const actionSkipSet = async (setId: number, reason: SkipReason) => {
   const sessionId = await skipSet(setId, reason)
-  revalidateWorkout()
+  refreshWorkout()
   return { sessionId }
 }
 
 export const actionSkipExercise = async (exerciseLogId: number, reason: SkipReason) => {
   const sessionId = await skipExercise(exerciseLogId, reason)
-  revalidateWorkout()
+  refreshWorkout()
   return { sessionId }
 }
 
 export const actionAddExtraSet = async (exerciseLogId: number) => {
   await addExtraSet(exerciseLogId)
-  revalidateWorkout()
+  refreshWorkout()
 }
 
 export const actionClearRestTimer = async (sessionId: number) => {
   await clearRestTimer(sessionId)
-  revalidateWorkout()
+  refreshWorkout()
 }
 
 export const actionAdjustRestTimer = async (sessionId: number, deltaSec: number) => {
   const endsAt = await adjustRestTimer(sessionId, deltaSec)
-  revalidateWorkout()
+  refreshWorkout()
   return { endsAt }
 }
 

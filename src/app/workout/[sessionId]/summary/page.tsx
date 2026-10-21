@@ -15,7 +15,7 @@ export default async function WorkoutSummaryPage({
   const detail = await loadSessionDetail(sessionId)
   if (!detail || detail.session.status !== 'completed') notFound()
 
-  const summary = await buildWorkoutSummary(sessionId)
+  const summary = await buildWorkoutSummary(detail)
   if (!summary) notFound()
 
   return (

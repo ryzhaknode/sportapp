@@ -13,7 +13,6 @@ interface RestTimerSheetProps {
   nextLabel: string | null
   soundEnabled: boolean
   vibrationEnabled: boolean
-  onDismiss: () => void
   onClear?: () => void | Promise<void>
   onAdjust?: (deltaSec: number) => void | Promise<void>
 }
@@ -24,7 +23,6 @@ export const RestTimerSheet = ({
   nextLabel,
   soundEnabled,
   vibrationEnabled,
-  onDismiss,
   onClear,
   onAdjust,
 }: RestTimerSheetProps) => {
@@ -81,8 +79,7 @@ export const RestTimerSheet = ({
     } else if (sessionId != null) {
       await actionClearRestTimer(sessionId)
     }
-    onDismiss()
-  }, [sessionId, onClear, onDismiss])
+  }, [sessionId, onClear])
 
   const handleAdjust = async (delta: number) => {
     if (onAdjust) {
@@ -90,7 +87,6 @@ export const RestTimerSheet = ({
     } else if (sessionId != null) {
       await actionAdjustRestTimer(sessionId, delta)
     }
-    onDismiss()
   }
 
   const remaining = view && view.endsAt === endsAt ? view.remaining : 0
