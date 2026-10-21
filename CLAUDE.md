@@ -7,7 +7,7 @@
 ## Стек
 - Next.js 16 (App Router, Server Actions), React 19, Tailwind 4.
 - Drizzle ORM + libSQL: прод — Turso на Vercel (`TURSO_DATABASE_URL`), локально — файл `data/workouts.db` (`DATABASE_URL`).
-- Тести — Vitest (`*.test.ts` поруч з кодом, лише чиста логіка без БД).
+- Тести — Vitest поруч з кодом: `*.test.ts` — чиста логіка без БД; `*.integration.test.ts` — з libSQL у тимчасовому файлі (не `:memory:`). `npm test` запускає обидва.
 
 ## Структура
 - `src/app/` — маршрути: `/` (наступне тренування), `workout/[sessionId]` (+ `summary`), `workout/weigh-in/[code]`, `history`, `program`, `weight`, `settings`, `guide`.
