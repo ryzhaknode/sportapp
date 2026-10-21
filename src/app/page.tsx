@@ -18,7 +18,7 @@ import {
   isMatchWithin48h,
 } from '@/lib/program/schedule'
 import { getWeekContext } from '@/lib/program/week-cycle'
-import { formatDateLocal, formatDisplayDate } from '@/lib/utils'
+import { formatDisplayDate, todayInAppTz } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +27,7 @@ const isWorkoutCode = (v: string | undefined): v is WorkoutTemplateCode =>
 
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
   const params = await searchParams
-  const today = formatDateLocal(new Date())
+  const today = todayInAppTz()
   const settings = await getSettings()
   const nextDate = getNextWorkoutDate(today)
   const nextCode = getWorkoutForDate(nextDate) ?? getNextWorkoutCode(today)

@@ -10,6 +10,37 @@ export const formatDateLocal = (date: Date): string => {
   return `${y}-${m}-${d}`
 }
 
+/**
+ * The user's timezone. The server (Vercel) runs in UTC, so "today" and clock
+ * times must be computed here explicitly, not from the process timezone.
+ */
+export const APP_TZ = 'Europe/Kyiv'
+
+const appDateFormat = new Intl.DateTimeFormat('en-CA', {
+  timeZone: APP_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/** Calendar date (YYYY-MM-DD) of an instant in APP_TZ. */
+export const formatDateInAppTz = (date: Date): string => {
+  const parts = Object.fromEntries(
+    appDateFormat.formatToParts(date).map((p) => [p.type, p.value]),
+  )
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+export const todayInAppTz = (): string => formatDateInAppTz(new Date())
+
+/** Clock time (HH:mm) of an ISO instant in APP_TZ. */
+export const formatTimeInAppTz = (iso: string): string =>
+  new Date(iso).toLocaleTimeString('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: APP_TZ,
+  })
+
 export const parseLocalDate = (dateStr: string): Date => new Date(`${dateStr}T12:00:00`)
 
 export const diffDays = (from: string, to: string): number => {

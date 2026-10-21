@@ -8,7 +8,7 @@ import {
   workoutTemplates,
 } from '@/lib/db/schema'
 import { CYCLE_LENGTH_WEEKS, PROGRAM_NAME, SEED_EXERCISES, SEED_WORKOUTS } from '@/lib/program/seed'
-import { formatDateLocal } from '@/lib/utils'
+import { todayInAppTz } from '@/lib/utils'
 
 export const ensureProgramSeeded = async (): Promise<number> => {
   const db = getDb()
@@ -81,7 +81,7 @@ export const ensureSettings = async () => {
     return rows[0]
   }
 
-  const today = formatDateLocal(new Date())
+  const today = todayInAppTz()
   await db.insert(settings).values({
     id: 1,
     programStartDate: today,

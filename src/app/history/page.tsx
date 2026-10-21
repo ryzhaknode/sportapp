@@ -6,7 +6,7 @@ import { exerciseSlots, exercises, workoutTemplates } from '@/lib/db/schema'
 import { getCompletedSessions } from '@/lib/db/workout-sessions'
 import { Badge } from '@/components/ui/badge'
 import { WORKOUT_CODE_COLORS } from '@/lib/program/types'
-import { cn } from '@/lib/utils'
+import { cn, formatTimeInAppTz } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,12 +53,7 @@ export default async function HistoryPage() {
             day: 'numeric',
             month: 'short',
           })
-          const timeLabel = s.finishedAt
-            ? new Date(s.finishedAt).toLocaleTimeString('uk-UA', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-            : null
+          const timeLabel = s.finishedAt ? formatTimeInAppTz(s.finishedAt) : null
 
           return (
             <li key={s.id}>
