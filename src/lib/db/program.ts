@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { ensureProgramSeeded } from '@/lib/db/seed-program'
 import {
@@ -35,8 +35,8 @@ export const getTemplateByCode = async (
   const slots = await db
     .select()
     .from(exerciseSlots)
-    .where(eq(exerciseSlots.workoutTemplateId, template.id))
-    .orderBy(asc(exerciseSlots.sortOrder))
+    .where(and(eq(exerciseSlots.workoutTemplateId, template.id), eq(exerciseSlots.archived, false)))
+    .orderBy(asc(exerciseSlots.sortOrder), asc(exerciseSlots.id))
 
   const allExercises = await db.select().from(exercises)
   const exMap = new Map(allExercises.map((e) => [e.id, e]))

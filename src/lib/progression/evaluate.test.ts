@@ -79,6 +79,18 @@ describe('evaluateProgression', () => {
     })
     expect(result.status).toBe('repeat')
   })
+
+  it('a longer maxGapDays (rotating slot) keeps progressing after 20 days', () => {
+    const lastLog = {
+      weight: 65,
+      sets: Array.from({ length: 4 }, () => ({ weight: 65, reps: 10, rir: 2, status: 'done' as const })),
+    }
+    const input = { slot, lastLog, prevLog: null, stallCount: 0, targetSets: 4, maxGapDays: 28 }
+    expect(evaluateProgression({ ...input, daysSinceLastSession: 20 }).status).toBe('increase_weight')
+    const afterBreak = evaluateProgression({ ...input, daysSinceLastSession: 29 })
+    expect(afterBreak.status).toBe('repeat')
+    expect(afterBreak.hint).toContain('28 днів')
+  })
 })
 
 const sessionSets = (weight: number, reps: number[]) => ({

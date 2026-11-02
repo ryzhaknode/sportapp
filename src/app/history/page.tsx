@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PageMain } from '@/components/layout/page-main'
-import { asc, inArray } from 'drizzle-orm'
+import { asc } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { exerciseSlots, exercises, workoutTemplates } from '@/lib/db/schema'
 import { getCompletedSessions } from '@/lib/db/workout-sessions'
@@ -14,28 +14,33 @@ export default async function HistoryPage() {
   const sessions = await getCompletedSessions(40)
   const db = getDb()
 
-  const templateIds = [...new Set(sessions.map((s) => s.workoutTemplateId))]
-  const templates =
-    templateIds.length > 0
-      ? await db
-          .select()
-          .from(workoutTemplates)
-          .where(inArray(workoutTemplates.id, templateIds))
-      : []
+  const templates = await db.select().from(workoutTemplates)
   const tplMap = new Map(templates.map((t) => [t.id, t.code]))
 
-  const slots = await db.select().from(exerciseSlots).orderBy(asc(exerciseSlots.id))
+  const slots = await db
+    .select()
+    .from(exerciseSlots)
+    .orderBy(
+      asc(exerciseSlots.workoutTemplateId),
+      asc(exerciseSlots.sortOrder),
+      asc(exerciseSlots.id),
+    )
   const allEx = await db.select().from(exercises)
   const exMap = new Map(allEx.map((e) => [e.id, e.name]))
 
   const seen = new Set<string>()
-  const exerciseLinks: { slotId: number; name: string }[] = []
+  const exerciseLinks: { slotId: number; name: string; code?: string; archived: boolean }[] = []
   for (const slot of slots) {
     const name = exMap.get(slot.exerciseId) ?? '?'
     const key = `${name}-${slot.workoutTemplateId}`
     if (seen.has(key)) continue
     seen.add(key)
-    exerciseLinks.push({ slotId: slot.id, name })
+    exerciseLinks.push({
+      slotId: slot.id,
+      name,
+      code: tplMap.get(slot.workoutTemplateId),
+      archived: slot.archived,
+    })
   }
 
   return (
@@ -93,6 +98,10 @@ export default async function HistoryPage() {
                 className="block rounded-xl border border-border px-3 py-2 text-sm hover:bg-secondary/50"
               >
                 {l.name}
+                <span className="text-muted-foreground">
+                  {l.code ? ` · ${l.code}` : ''}
+                  {l.archived ? ' · архів' : ''}
+                </span>
               </Link>
             </li>
           ))}

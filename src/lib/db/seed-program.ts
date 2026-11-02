@@ -62,6 +62,7 @@ export const ensureProgramSeeded = async (): Promise<number> => {
         twelveWeekTargetMin: slot.twelveWeekTargetMin ?? null,
         twelveWeekTargetMax: slot.twelveWeekTargetMax ?? null,
         targetReps: 6,
+        rotationGroup: slot.rotationGroup ?? null,
       })
     }
   }

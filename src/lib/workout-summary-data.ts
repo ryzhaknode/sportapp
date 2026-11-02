@@ -1,11 +1,9 @@
-import { getTemplateByCode } from '@/lib/db/program'
 import {
-  getPreviousCompletedSession,
-  loadSessionDetail,
   loadTemplateHistory,
   progressionFromHistory,
   type SessionDetail,
 } from '@/lib/db/workout-sessions'
+import type { SlotHistoryEntry } from '@/lib/progression/history'
 import { calcTonnage, formatWeight } from '@/lib/progression/weight'
 import { compareExerciseResult } from '@/lib/workout-summary-compare'
 import type { WeightType } from '@/lib/program/types'
@@ -40,20 +38,29 @@ const formatSets = (sets: { weight: number | null; reps: number | null }[], wt: 
   return `${prefix} × ${reps}`
 }
 
+/**
+ * Done sets from the last earlier session that did this slot. Rotating slots
+ * skip sessions of their workout, so this isn't simply the previous session.
+ */
+const previousDoneSets = (
+  entries: SlotHistoryEntry[],
+  session: SessionDetail['session'],
+): SlotHistoryEntry['sets'] => {
+  for (const entry of entries) {
+    const earlier =
+      entry.date < session.date || (entry.date === session.date && entry.sessionId < session.id)
+    if (!earlier) continue
+    const done = entry.sets.filter((s) => s.status === 'done')
+    if (done.length) return done
+  }
+  return []
+}
+
 export const buildWorkoutSummary = async (
   detail: SessionDetail,
 ): Promise<WorkoutSummaryData | null> => {
   if (!detail.session.finishedAt) return null
-  const sessionId = detail.session.id
-
-  const [prevSession, history] = await Promise.all([
-    getPreviousCompletedSession(detail.session.workoutTemplateId, sessionId),
-    loadTemplateHistory(detail.session.workoutTemplateId),
-  ])
-  const prevDetail =
-    prevSession && prevSession.id !== sessionId
-      ? await loadSessionDetail(prevSession.id)
-      : null
+  const history = await loadTemplateHistory(detail.session.workoutTemplateId)
 
   const started = new Date(detail.session.startedAt).getTime()
   const finished = new Date(detail.session.finishedAt).getTime()
@@ -61,6 +68,7 @@ export const buildWorkoutSummary = async (
 
   let tonnage = 0
   let prevTonnage = 0
+  let hasPrev = false
   let progressCount = 0
   const rows: ExerciseSummaryRow[] = []
 
@@ -69,9 +77,11 @@ export const buildWorkoutSummary = async (
     const done = ex.sets.filter((s) => s.status === 'done')
     tonnage += calcTonnage(done)
 
-    const prevEx = prevDetail?.exercises.find((p) => p.exerciseSlotId === ex.exerciseSlotId)
-    const prevDone = prevEx?.sets.filter((s) => s.status === 'done') ?? []
-    if (prevDone.length) prevTonnage += calcTonnage(prevDone)
+    const prevDone = previousDoneSets(history.get(ex.exerciseSlotId) ?? [], detail.session)
+    if (prevDone.length) {
+      hasPrev = true
+      prevTonnage += calcTonnage(prevDone)
+    }
 
     const { resultLabel, resultTone, isPr, progressed } = compareExerciseResult(done, prevDone)
     if (progressed) progressCount += 1
@@ -97,16 +107,14 @@ export const buildWorkoutSummary = async (
     })
   }
 
-  const template = await getTemplateByCode(detail.templateCode)
-
   return {
     templateCode: detail.templateCode,
     durationSec,
     setCount: detail.exercises.reduce((n, e) => n + e.sets.filter((s) => s.status === 'done').length, 0),
     tonnage,
-    tonnageDelta: prevDetail ? tonnage - prevTonnage : null,
+    tonnageDelta: hasPrev ? tonnage - prevTonnage : null,
     progressCount,
-    totalExercises: template?.slots.length ?? detail.exercises.length,
+    totalExercises: detail.exercises.length,
     rows,
   }
 }

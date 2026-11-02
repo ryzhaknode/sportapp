@@ -76,6 +76,15 @@ export const ProgramEditor = ({ templates }: ProgramEditorProps) => {
             {tpl.slots.map((slot) => (
               <li key={slot.id} className="rounded-xl border border-border bg-card p-3">
                 <p className="font-medium">{slot.exercise.name}</p>
+                {slot.rotationGroup && (
+                  <p className="text-xs text-muted-foreground">
+                    ⇄ через раз з{' '}
+                    {tpl.slots
+                      .filter((s) => s.rotationGroup === slot.rotationGroup && s.id !== slot.id)
+                      .map((s) => `«${s.exercise.name}»`)
+                      .join(', ')}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {slot.sets} × {slot.repMin}–{slot.repMax} · RIR {slot.rirMin}–{slot.rirMax} ·{' '}
                   {formatDuration(slot.restSec)}
