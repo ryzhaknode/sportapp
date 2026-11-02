@@ -1,5 +1,4 @@
 ALTER TABLE `exercise_slots` ADD `rotation_group` text;--> statement-breakpoint
-ALTER TABLE `exercise_slots` ADD `rotation_phase` integer;--> statement-breakpoint
 ALTER TABLE `exercise_slots` ADD `archived` integer DEFAULT false NOT NULL;--> statement-breakpoint
 -- Data changes below touch an already seeded program only; a fresh database
 -- gets the same program from the seed (src/lib/program/seed.ts).
@@ -27,9 +26,6 @@ WHERE s.`archived` = false
   AND s.`exercise_id` IN (SELECT `id` FROM `exercises` WHERE `name` = 'Румунська тяга');--> statement-breakpoint
 UPDATE `exercise_slots` SET `archived` = true
 WHERE `exercise_id` IN (SELECT `id` FROM `exercises` WHERE `name` = 'Румунська тяга');--> statement-breakpoint
--- Week phases complement each other across A/B/C: in C the primary runs in
--- phase 1, so e.g. weighted pull-ups in A go with the lat pulldown in C and
--- the barbell curl in A with the cable curl in C (see src/lib/program/seed.ts).
 WITH `pairs`(`primary_name`, `rotation_group`) AS (VALUES
   ('Підтягування з вагою', 'vertical_pull'),
   ('Біцепс зі штангою', 'curl'),
@@ -37,15 +33,10 @@ WITH `pairs`(`primary_name`, `rotation_group`) AS (VALUES
   ('Тяга горизонтального блоку сидячи', 'row'),
   ('Жим стоячи', 'shoulder_press')
 )
-UPDATE `exercise_slots` SET
-  `rotation_group` = (
-    SELECT p.`rotation_group` FROM `pairs` p JOIN `exercises` e ON e.`name` = p.`primary_name`
-    WHERE e.`id` = `exercise_slots`.`exercise_id`
-  ),
-  `rotation_phase` = (
-    SELECT CASE t.`code` WHEN 'C' THEN 1 ELSE 0 END FROM `workout_templates` t
-    WHERE t.`id` = `exercise_slots`.`workout_template_id`
-  )
+UPDATE `exercise_slots` SET `rotation_group` = (
+  SELECT p.`rotation_group` FROM `pairs` p JOIN `exercises` e ON e.`name` = p.`primary_name`
+  WHERE e.`id` = `exercise_slots`.`exercise_id`
+)
 WHERE `archived` = false
   AND `exercise_id` IN (SELECT e.`id` FROM `exercises` e JOIN `pairs` p ON p.`primary_name` = e.`name`);--> statement-breakpoint
 -- Each paired slot gets its alternative with the same sets/reps/RIR/rest and
@@ -60,12 +51,11 @@ WITH `pairs`(`primary_name`, `alt_name`, `increment`) AS (VALUES
 INSERT INTO `exercise_slots` (
   `workout_template_id`, `exercise_id`, `sort_order`, `sets`, `rep_min`, `rep_max`,
   `rir_min`, `rir_max`, `rest_sec`, `start_weight`, `increment`, `extra_set_in_phase`,
-  `target_reps`, `rotation_group`, `rotation_phase`
+  `target_reps`, `rotation_group`
 )
 SELECT s.`workout_template_id`, (SELECT max(a.`id`) FROM `exercises` a WHERE a.`name` = p.`alt_name`),
   s.`sort_order`, s.`sets`, s.`rep_min`, s.`rep_max`, s.`rir_min`, s.`rir_max`, s.`rest_sec`,
-  NULL, p.`increment`, s.`extra_set_in_phase`, s.`target_reps`, s.`rotation_group`,
-  1 - s.`rotation_phase`
+  NULL, p.`increment`, s.`extra_set_in_phase`, s.`target_reps`, s.`rotation_group`
 FROM `exercise_slots` s
 JOIN `exercises` e ON e.`id` = s.`exercise_id`
 JOIN `pairs` p ON p.`primary_name` = e.`name`
