@@ -33,7 +33,7 @@ export default async function ExerciseHistoryPage({
         <h1 className="text-xl font-bold">{slot.exercise.name}</h1>
         {target && (
           <p className="mt-1 text-sm text-muted-foreground">
-            Ціль 12 тижнів: {target}
+            Ціль за 12 циклів: {target}
             {currentWeight != null && (
               <> · зараз старт {formatWeight(currentWeight, wt)}</>
             )}

@@ -115,7 +115,9 @@ export const SettingsForm = ({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="programStartDate">Дата старту 13-тижневого циклу</Label>
+            <Label htmlFor="programStartDate">
+              Старт програми: цикли A → B → C рахуються з тренувань від цієї дати
+            </Label>
             <Input
               id="programStartDate"
               type="date"
@@ -141,7 +143,7 @@ export const SettingsForm = ({
               }
               className="h-5 w-5 rounded border-border"
             />
-            Турнірний тиждень (2 підходи, запас 2–3)
+            Турнірний режим (2 підходи, запас 2–3)
           </label>
           <Button
             onClick={() => handleSaveSettings('program')}

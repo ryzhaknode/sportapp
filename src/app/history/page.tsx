@@ -69,7 +69,7 @@ export default async function HistoryPage() {
                 <div>
                   <p className="font-medium">{dateLabel}</p>
                   <p className="text-xs text-muted-foreground">
-                    Тиждень {s.weekNumber} · {s.mode}
+                    Цикл {s.weekNumber} · {s.mode}
                     {timeLabel ? ` · ${timeLabel}` : ''}
                   </p>
                 </div>

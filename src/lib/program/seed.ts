@@ -67,10 +67,10 @@ export const SEED_EXERCISES: SeedExercise[] = [
 ]
 
 /**
- * Pairs `slot` with an alternative exercise: the two take turns week by week
- * with the same sets/reps/RIR/rest — `slot` in week phase `phase`, the
- * alternative in the other one. Phases are chosen across A/B/C so a week never
- * repeats a variant: e.g. weighted pull-ups in A go with the lat pulldown in C.
+ * Pairs `slot` with an alternative exercise: the two take turns A-B-C cycle by
+ * cycle with the same sets/reps/RIR/rest — `slot` in rotation phase `phase`,
+ * the alternative in the other one. Phases are chosen across A/B/C so a cycle
+ * never repeats a variant: e.g. weighted pull-ups in A go with the lat pulldown in C.
  * The alternative has its own progression, so it starts without a weight and
  * has no 12-week target.
  */

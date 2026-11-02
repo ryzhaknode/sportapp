@@ -8,7 +8,8 @@ interface WorkoutCodePickerProps {
   value: WorkoutTemplateCode
   onChange: (code: WorkoutTemplateCode) => void
   disabled?: boolean
-  scheduledToday: WorkoutTemplateCode | null
+  /** Next workout in the A → B → C order. */
+  nextCode: WorkoutTemplateCode
   completedToday: Record<WorkoutTemplateCode, boolean>
 }
 
@@ -18,7 +19,7 @@ export const WorkoutCodePicker = ({
   value,
   onChange,
   disabled = false,
-  scheduledToday,
+  nextCode,
   completedToday,
 }: WorkoutCodePickerProps) => {
   return (
@@ -27,7 +28,7 @@ export const WorkoutCodePicker = ({
       <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Тип тренування">
         {CODES.map((code) => {
           const selected = value === code
-          const isScheduled = scheduledToday === code
+          const isNext = nextCode === code
           const isDone = completedToday[code]
 
           return (
@@ -47,8 +48,8 @@ export const WorkoutCodePicker = ({
               )}
             >
               {code}
-              {isScheduled && (
-                <span className="mt-0.5 text-[10px] font-normal opacity-80">за планом</span>
+              {isNext && (
+                <span className="mt-0.5 text-[10px] font-normal opacity-80">наступне</span>
               )}
               {isDone && (
                 <span className="mt-0.5 text-[10px] font-normal text-emerald-400">✓ сьогодні</span>

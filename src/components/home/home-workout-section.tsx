@@ -17,9 +17,10 @@ interface PreviewExercise {
 }
 
 interface HomeWorkoutSectionProps {
-  scheduledToday: WorkoutTemplateCode | null
-  weekNumber: number
-  mode: SessionMode
+  /** Next workout in the A → B → C order. */
+  nextCode: WorkoutTemplateCode
+  /** Program cycle (1–13) and its mode a session of each workout would get now. */
+  cycles: Record<WorkoutTemplateCode, { number: number; mode: SessionMode }>
   previews: Record<WorkoutTemplateCode, PreviewExercise[]>
   completedSessionId: Record<WorkoutTemplateCode, number | null>
   continueSessionId: number | null
@@ -28,9 +29,8 @@ interface HomeWorkoutSectionProps {
 }
 
 export const HomeWorkoutSection = ({
-  scheduledToday,
-  weekNumber,
-  mode,
+  nextCode,
+  cycles,
   previews,
   completedSessionId,
   continueSessionId,
@@ -38,7 +38,7 @@ export const HomeWorkoutSection = ({
   initialCode,
 }: HomeWorkoutSectionProps) => {
   const defaultCode =
-    continueSessionCode ?? scheduledToday ?? initialCode ?? ('A' as WorkoutTemplateCode)
+    continueSessionCode ?? initialCode ?? nextCode
 
   const [selected, setSelected] = useState<WorkoutTemplateCode>(defaultCode)
 
@@ -61,12 +61,11 @@ export const HomeWorkoutSection = ({
   const card = (
     <NextWorkoutCard
       code={effectiveCode}
-      weekNumber={weekNumber}
-      mode={mode}
+      cycleNumber={cycles[effectiveCode].number}
+      mode={cycles[effectiveCode].mode}
       exercises={exercises}
       continueSessionId={continueSessionId}
       todayCompletedSessionId={completedSessionId[effectiveCode]}
-      isScheduledToday={scheduledToday === effectiveCode}
     />
   )
 
@@ -76,16 +75,16 @@ export const HomeWorkoutSection = ({
         <WorkoutCodePicker
           value={selected}
           onChange={setSelected}
-          scheduledToday={scheduledToday}
+          nextCode={nextCode}
           completedToday={completedToday}
         />
       )}
 
       {canStart ? <StartWorkoutForm code={selected}>{card}</StartWorkoutForm> : card}
 
-      {!continueSessionId && scheduledToday && selected !== scheduledToday && (
+      {!continueSessionId && selected !== nextCode && (
         <p className="text-center text-xs text-muted-foreground">
-          За розкладом сьогодні — тренування {scheduledToday}. Ти обрав {selected}; прогресія
+          За порядком A → B → C наступне — тренування {nextCode}. Ти обрав {selected}; прогресія
           рахується окремо для кожного типу.
         </p>
       )}

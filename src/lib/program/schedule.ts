@@ -1,41 +1,30 @@
 import type { WorkoutTemplateCode } from '@/lib/db/schema'
-import { formatDateLocal, parseLocalDate } from '@/lib/utils'
+import { CYCLE_LENGTH_WEEKS } from '@/lib/program/seed'
+import { parseLocalDate } from '@/lib/utils'
 
-/** Monday=1 … Sunday=0 in JS getDay(); we map Mon/Wed/Fri */
-const SCHEDULE: Record<number, WorkoutTemplateCode> = {
-  1: 'A',
-  3: 'B',
-  5: 'C',
-}
+/**
+ * Workouts go A → B → C → A… whenever they happen: no weekdays, no calendar
+ * weeks. One A-B-C round is a cycle; the 13-step program counts cycles.
+ */
+export const WORKOUT_ORDER: readonly WorkoutTemplateCode[] = ['A', 'B', 'C']
 
-export const getWorkoutForDate = (date: string): WorkoutTemplateCode | null => {
-  const day = parseLocalDate(date).getDay()
-  return SCHEDULE[day] ?? null
-}
+/** The workout after the last completed one (A to begin with). */
+export const getNextWorkoutCode = (lastCode: WorkoutTemplateCode | null): WorkoutTemplateCode =>
+  lastCode
+    ? WORKOUT_ORDER[(WORKOUT_ORDER.indexOf(lastCode) + 1) % WORKOUT_ORDER.length]
+    : 'A'
 
-export const getNextWorkoutDate = (fromDate: string): string => {
-  let cursor = parseLocalDate(fromDate)
-  for (let i = 0; i < 14; i += 1) {
-    const dateStr = formatDateLocal(cursor)
-    if (getWorkoutForDate(dateStr)) return dateStr
-    cursor = new Date(cursor.getTime() + 86_400_000)
-  }
-  return fromDate
-}
+/**
+ * 0-based A-B-C cycle a new session of `code` belongs to, given how many A
+ * sessions were completed since the program start. A opens a cycle; B and C
+ * belong to the cycle of the last A.
+ */
+export const getCycleIndex = (code: WorkoutTemplateCode, completedA: number): number =>
+  code === 'A' ? completedA : Math.max(0, completedA - 1)
 
-export const getNextWorkoutCode = (fromDate: string): WorkoutTemplateCode => {
-  const date = getNextWorkoutDate(fromDate)
-  return getWorkoutForDate(date) ?? 'A'
-}
-
-export const getWeekNumber = (programStartDate: string, date: string): number => {
-  const start = parseLocalDate(programStartDate)
-  const target = parseLocalDate(date)
-  const diffMs = target.getTime() - start.getTime()
-  const weekIndex = Math.floor(diffMs / (7 * 86_400_000))
-  const week = (weekIndex % 13) + 1
-  return week < 1 ? 1 : week
-}
+/** Position of a cycle within the program: 1–13, then again from 1. */
+export const getProgramCycle = (cycleIndex: number): number =>
+  (cycleIndex % CYCLE_LENGTH_WEEKS) + 1
 
 export const daysSince = (fromDate: string, toDate: string): number => {
   const a = parseLocalDate(fromDate)
@@ -43,10 +32,9 @@ export const daysSince = (fromDate: string, toDate: string): number => {
   return Math.round((b.getTime() - a.getTime()) / 86_400_000)
 }
 
-export const isMatchWithin48h = (matchDate: string | null, workoutDate: string): boolean => {
+/** The match is later than `date` but less than 48 hours away. */
+export const isMatchWithin48h = (matchDate: string | null, date: string): boolean => {
   if (!matchDate) return false
-  const code = getWorkoutForDate(workoutDate)
-  if (code !== 'A' && code !== 'B') return false
-  const hours = (parseLocalDate(matchDate).getTime() - parseLocalDate(workoutDate).getTime()) / 3_600_000
+  const hours = (parseLocalDate(matchDate).getTime() - parseLocalDate(date).getTime()) / 3_600_000
   return hours > 0 && hours < 48
 }

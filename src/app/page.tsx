@@ -4,19 +4,15 @@ import { StaleSessionBanner } from '@/components/home/stale-session-banner'
 import { getSettings } from '@/lib/db/settings'
 import { getTemplateCodeForSession } from '@/lib/db/session-template-code'
 import {
+  getCycleState,
+  getCyclePosition,
   getHomeExercisePreviews,
   getInProgressSession,
   getTodayCompletedSessionForCode,
   isSessionStale,
 } from '@/lib/db/workout-sessions'
-import type { WorkoutTemplateCode } from '@/lib/db/schema'
-import {
-  getNextWorkoutCode,
-  getNextWorkoutDate,
-  getWeekNumber,
-  getWorkoutForDate,
-  isMatchWithin48h,
-} from '@/lib/program/schedule'
+import type { SessionMode, WorkoutTemplateCode } from '@/lib/db/schema'
+import { getNextWorkoutCode, isMatchWithin48h, WORKOUT_ORDER } from '@/lib/program/schedule'
 import { getWeekContext } from '@/lib/program/week-cycle'
 import { formatDisplayDate, todayInAppTz } from '@/lib/utils'
 
@@ -29,11 +25,15 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   const params = await searchParams
   const today = todayInAppTz()
   const settings = await getSettings()
-  const nextDate = getNextWorkoutDate(today)
-  const nextCode = getWorkoutForDate(nextDate) ?? getNextWorkoutCode(today)
-  const weekNumber = getWeekNumber(settings.programStartDate, today)
-  const weekContext = getWeekContext(weekNumber, settings.tournamentWeekEnabled)
-  const scheduledToday = getWorkoutForDate(today)
+  const cycleState = await getCycleState(settings.programStartDate)
+  const nextCode = getNextWorkoutCode(cycleState.lastCode)
+  const cycles = Object.fromEntries(
+    WORKOUT_ORDER.map((code) => {
+      const { weekNumber } = getCyclePosition(cycleState, code)
+      const { mode } = getWeekContext(weekNumber, settings.tournamentWeekEnabled)
+      return [code, { number: weekNumber, mode }]
+    }),
+  ) as Record<WorkoutTemplateCode, { number: number; mode: SessionMode }>
 
   const [previewA, previewB, previewC, completedA, completedB, completedC, inProgress] =
     await Promise.all([
@@ -50,10 +50,9 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
     ? await getTemplateCodeForSession(inProgress.id)
     : null
 
-  const matchCode = scheduledToday ?? nextCode
   const matchWarning =
     settings.matchDate &&
-    (matchCode === 'A' || matchCode === 'B') &&
+    (nextCode === 'A' || nextCode === 'B') &&
     isMatchWithin48h(settings.matchDate, today)
 
   const workoutParam = params?.workout
@@ -73,15 +72,8 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
           className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-red-200"
           role="alert"
         >
-          Сьогодні {matchCode} (з ногами) менше ніж за 48 год до матчу — можливо, варто перенести.
+          Наступне — {nextCode} (з ногами), а до матчу менше ніж 48 год — можливо, варто перенести.
         </div>
-      )}
-
-      {scheduledToday == null && !inProgress && (
-        <p className="rounded-xl border border-border bg-card/50 px-3 py-2 text-center text-sm text-muted-foreground">
-          Сьогодні за планом відпочинок. Наступне: {nextCode} — {formatDisplayDate(nextDate)}. Можеш
-          обрати будь-яке тренування нижче.
-        </p>
       )}
 
       {inProgress && isSessionStale(inProgress) && (
@@ -90,9 +82,8 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
 
       {!(inProgress && isSessionStale(inProgress)) && (
         <HomeWorkoutSection
-          scheduledToday={scheduledToday}
-          weekNumber={weekNumber}
-          mode={weekContext.mode}
+          nextCode={nextCode}
+          cycles={cycles}
           previews={{ A: previewA, B: previewB, C: previewC }}
           completedSessionId={{
             A: completedA?.id ?? null,
