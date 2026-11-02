@@ -25,7 +25,7 @@ export const exercises = sqliteTable('exercises', {
   name: text('name').notNull(),
   muscleGroup: text('muscle_group').notNull(),
   weightType: text('weight_type', {
-    enum: ['barbell', 'dumbbell_per_hand', 'bodyweight_plus', 'cable'],
+    enum: ['barbell', 'dumbbell_per_hand', 'bodyweight_plus', 'cable', 'machine'],
   }).notNull(),
 })
 
@@ -53,6 +53,10 @@ export const exerciseSlots = sqliteTable('exercise_slots', {
   twelveWeekTargetMin: real('twelve_week_target_min'),
   twelveWeekTargetMax: real('twelve_week_target_max'),
   targetReps: integer('target_reps').default(6),
+  /** Slots of one template with the same group take turns: one of them per session. */
+  rotationGroup: text('rotation_group'),
+  /** Removed from the program; kept so past logs still resolve their exercise. */
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 })
 
 export const workoutSessions = sqliteTable('workout_sessions', {

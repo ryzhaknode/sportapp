@@ -1,6 +1,6 @@
 import type { SessionMode, WorkoutTemplateCode } from '@/lib/db/schema'
 
-export type WeightType = 'barbell' | 'dumbbell_per_hand' | 'bodyweight_plus' | 'cable'
+export type WeightType = 'barbell' | 'dumbbell_per_hand' | 'bodyweight_plus' | 'cable' | 'machine'
 
 export interface SeedExercise {
   key: string
@@ -22,6 +22,8 @@ export interface SeedSlot {
   extraSetInPhase?: boolean
   twelveWeekTargetMin?: number
   twelveWeekTargetMax?: number
+  /** Slots of a workout sharing a group alternate session by session. */
+  rotationGroup?: string
 }
 
 export interface SeedWorkout {

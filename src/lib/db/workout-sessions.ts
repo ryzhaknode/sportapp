@@ -30,6 +30,7 @@ import {
   getEffectiveSlotParams,
   getWeekContext,
 } from '@/lib/program/week-cycle'
+import { maxGapDaysFor, selectSessionSlots } from '@/lib/program/rotation'
 import { getWeekNumber } from '@/lib/program/schedule'
 import { todayInAppTz } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
@@ -124,6 +125,7 @@ export const progressionFromHistory = (history: SlotHistory, slot: ExerciseSlot)
     slot,
     history: toProgressionHistory(history.get(slot.id) ?? [], slot),
     today: todayInAppTz(),
+    maxGapDays: maxGapDaysFor(slot),
   })
 
 export const getProgressionForSlot = async (slotId: number, templateId: number) => {
@@ -207,7 +209,7 @@ export const startWorkoutSession = async (
     })
     .returning()
 
-  const plans = template.slots.map((slot, i) => ({
+  const plans = selectSessionSlots(template.slots, history).map((slot, i) => ({
     slot,
     sortOrder: i,
     effective: getEffectiveSlotParams(slot, context),
@@ -624,29 +626,12 @@ export const getCompletedSessions = async (limit = 50) => {
     .limit(limit)
 }
 
-export const getPreviousCompletedSession = async (
-  templateId: number,
-  beforeSessionId: number,
-) => {
-  const db = getDb()
-  const rows = await db
-    .select()
-    .from(workoutSessions)
-    .where(
-      and(eq(workoutSessions.workoutTemplateId, templateId), eq(workoutSessions.status, 'completed')),
-    )
-    .orderBy(desc(workoutSessions.finishedAt))
-    .limit(20)
-
-  return rows.find((r) => r.id !== beforeSessionId) ?? null
-}
-
 export const getHomeExercisePreviews = async (code: WorkoutTemplateCode) => {
   const template = await getTemplateByCode(code)
   if (!template) return []
 
   const history = await loadTemplateHistory(template.id)
-  return template.slots.map((slot) => {
+  return selectSessionSlots(template.slots, history).map((slot) => {
     const progression = progressionFromHistory(history, slot)
     return {
       name: slot.exercise.name,

@@ -36,6 +36,13 @@
       "when": 1756316900000,
       "tag": "0005_history_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1756317000000,
+      "tag": "0006_exercise_rotation",
+      "breakpoints": true
     }
   ]
 }

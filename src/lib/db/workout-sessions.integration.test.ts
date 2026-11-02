@@ -36,6 +36,7 @@ import {
   skipSet,
   startWorkoutSession,
 } from '@/lib/db/workout-sessions'
+import { selectSessionSlots } from '@/lib/program/rotation'
 import { getEffectiveSlotParams, getWeekContext } from '@/lib/program/week-cycle'
 import { decreaseWeight, roundToIncrement } from '@/lib/progression/weight'
 
@@ -46,6 +47,10 @@ const BASE_TIME = new Date('2026-01-12T05:00:00.000Z')
 
 let tmpDir: string
 let templateA: TemplateWithSlots
+/** Slots of A's first session: fixed ones plus the first member of each rotation group. */
+let firstSessionA: TemplateWithSlots['slots']
+/** Slots of A that run every session (not rotating). */
+let fixedA: TemplateWithSlots['slots']
 
 /** Calendar date of the frozen clock (same in UTC and Kyiv at 05:00 UTC). */
 const today = (): string => new Date().toISOString().slice(0, 10)
@@ -112,6 +117,8 @@ beforeAll(async () => {
   const tpl = await getTemplateByCode('A')
   if (!tpl) throw new Error('template A not seeded')
   templateA = tpl
+  firstSessionA = selectSessionSlots(tpl.slots, new Map())
+  fixedA = tpl.slots.filter((s) => !s.rotationGroup)
 })
 
 afterAll(() => {
@@ -145,8 +152,8 @@ describe('startWorkoutSession', () => {
     expect(detail.restTimer).toBeNull()
 
     const ctx = getWeekContext(1, false)
-    expect(detail.exercises.map((e) => e.exerciseSlotId)).toEqual(templateA.slots.map((s) => s.id))
-    for (const [i, slot] of templateA.slots.entries()) {
+    expect(detail.exercises.map((e) => e.exerciseSlotId)).toEqual(firstSessionA.map((s) => s.id))
+    for (const [i, slot] of firstSessionA.entries()) {
       const ex = detail.exercises[i]
       const effective = getEffectiveSlotParams(slot, ctx)
       expect(ex.sortOrder).toBe(i)
@@ -182,7 +189,7 @@ describe('startWorkoutSession', () => {
 
     expect(detail.session).toMatchObject({ weekNumber: week, mode })
     const ctx = getWeekContext(week, false)
-    for (const [i, slot] of templateA.slots.entries()) {
+    for (const [i, slot] of firstSessionA.entries()) {
       expect(detail.exercises[i].sets).toHaveLength(getEffectiveSlotParams(slot, ctx).sets)
     }
     if (week === 8) {
@@ -254,7 +261,7 @@ describe('completeSet / finishWorkoutSession', () => {
     expect(await getDb().select().from(restTimers)).toHaveLength(0)
 
     const rows = await progressionRows()
-    expect(rows.map((r) => r.exerciseSlotId)).toEqual(templateA.slots.map((s) => s.id).sort((a, b) => a - b))
+    expect(rows.map((r) => r.exerciseSlotId)).toEqual(firstSessionA.map((s) => s.id).sort((a, b) => a - b))
     const squat = rows.find((r) => r.exerciseSlotId === first.exerciseSlotId)!
     // A single session has no previous one to compare → add_reps at the same weight.
     expect(squat).toMatchObject({ currentWeight: 70, stallCount: 0, lastStatus: 'add_reps' })
@@ -266,10 +273,10 @@ describe('progression across sessions', () => {
     await runSession('A', (ex) => ({ weight: startWeightOf(ex), reps: ex.repMax, rir: ex.rirMin }))
 
     const previews = await getHomeExercisePreviews('A')
-    expect(previews.map((p) => p.slotId)).toEqual(templateA.slots.map((s) => s.id))
-    for (const [i, slot] of templateA.slots.entries()) {
-      expect(previews[i].status).toBe('increase_weight')
-      expect(previews[i].suggestedWeight).toBe(
+    for (const slot of fixedA) {
+      const preview = previews.find((p) => p.slotId === slot.id)!
+      expect(preview.status).toBe('increase_weight')
+      expect(preview.suggestedWeight).toBe(
         roundToIncrement((slot.startWeight ?? 0) + slot.increment, slot.increment),
       )
     }
@@ -281,7 +288,7 @@ describe('progression across sessions', () => {
     await runSession('A', (ex) => ({ weight: startWeightOf(ex), reps: ex.repMax, rir: ex.rirMin }))
 
     const detail = await loadDetail(await startWorkoutSession('A', 80))
-    for (const ex of detail.exercises) {
+    for (const ex of detail.exercises.filter((e) => !e.slot.rotationGroup)) {
       const increased = roundToIncrement(startWeightOf(ex) + ex.slot.increment, ex.slot.increment)
       expect(ex.suggestedStatus).toBe('increase_weight')
       expect(ex.suggestedWeight).toBe(increased)
@@ -312,9 +319,10 @@ describe('progression across sessions', () => {
 
     await runSession('A', sameEveryTime)
     const previews = await getHomeExercisePreviews('A')
-    for (const [i, slot] of templateA.slots.entries()) {
-      expect(previews[i].status).toBe('decrease_weight')
-      expect(previews[i].suggestedWeight).toBe(decreaseWeight(slot.startWeight ?? 0, slot.increment))
+    for (const slot of fixedA) {
+      const preview = previews.find((p) => p.slotId === slot.id)!
+      expect(preview.status).toBe('decrease_weight')
+      expect(preview.suggestedWeight).toBe(decreaseWeight(slot.startWeight ?? 0, slot.increment))
     }
     expect((await progressionRows()).find((r) => r.exerciseSlotId === squatSlot.id)).toMatchObject({
       stallCount: 0,
@@ -322,7 +330,7 @@ describe('progression across sessions', () => {
     })
     // The next session opens on the reduced weight at repMin.
     const detail = await loadDetail(await startWorkoutSession('A', 80))
-    for (const ex of detail.exercises) {
+    for (const ex of detail.exercises.filter((e) => !e.slot.rotationGroup)) {
       const decreased = decreaseWeight(startWeightOf(ex), ex.slot.increment)
       for (const set of ex.sets) {
         expect(set.weight).toBe(decreased)
@@ -345,8 +353,57 @@ describe('progression across sessions', () => {
     const deload = await loadDetail(deloadId)
     expect(deload.session).toMatchObject({ mode: 'deload', weekNumber: 7, status: 'completed' })
 
-    expect(await getHomeExercisePreviews('A')).toEqual(before)
+    // The rotation moves on in a deload week too; fixed slots keep their result.
+    const fixedIds = new Set(fixedA.map((s) => s.id))
+    const fixedOnly = (previews: typeof before) => previews.filter((p) => fixedIds.has(p.slotId))
+    expect(fixedOnly(await getHomeExercisePreviews('A'))).toEqual(fixedOnly(before))
     expect(await progressionRows()).toEqual(stateBefore)
+  })
+})
+
+describe('rotating exercises', () => {
+  it('alternate session by session, each with its own progression', async () => {
+    const rotating = templateA.slots.filter((s) => s.rotationGroup)
+    const primaries = rotating.filter((s) => firstSessionA.includes(s))
+    const alternatives = rotating.filter((s) => !firstSessionA.includes(s))
+    expect(primaries.length).toBeGreaterThan(0)
+    expect(alternatives).toHaveLength(primaries.length)
+
+    const atRepMax = (ex: ExerciseLogRow): SetValues => ({
+      weight: ex.slot.startWeight ?? 20,
+      reps: ex.repMax,
+      rir: ex.rirMin,
+    })
+    await runSession('A', atRepMax)
+    advanceDays(7)
+
+    // Second session: the alternatives take the primaries' places, fresh.
+    const secondId = await startWorkoutSession('A', 80)
+    const second = await loadDetail(secondId)
+    const slotIds = second.exercises.map((e) => e.exerciseSlotId)
+    for (const [i, primary] of primaries.entries()) {
+      expect(slotIds).not.toContain(primary.id)
+      const alt = second.exercises.find((e) => e.exerciseSlotId === alternatives[i].id)!
+      expect(alt.sortOrder).toBe(firstSessionA.indexOf(primary))
+      expect(alt).toMatchObject({ suggestedStatus: 'first', suggestedWeight: null })
+    }
+    for (const ex of second.exercises) {
+      for (const set of ex.sets) await completeSet({ setId: Number(set.id), ...atRepMax(ex) })
+    }
+    expect(await finishWorkoutSession(secondId)).toEqual({ ok: true, sessionId: secondId })
+    advanceDays(9)
+
+    // Third session, 18 days after the first: primaries are back and still
+    // progress — the 14-day break rule is doubled for rotating slots.
+    const third = await loadDetail(await startWorkoutSession('A', 80))
+    expect(third.exercises.map((e) => e.exerciseSlotId)).toEqual(firstSessionA.map((s) => s.id))
+    for (const primary of primaries) {
+      const ex = third.exercises.find((e) => e.exerciseSlotId === primary.id)!
+      expect(ex.suggestedStatus).toBe('increase_weight')
+      expect(ex.suggestedWeight).toBe(
+        roundToIncrement((primary.startWeight ?? 20) + primary.increment, primary.increment),
+      )
+    }
   })
 })
 

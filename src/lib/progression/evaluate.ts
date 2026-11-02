@@ -25,6 +25,8 @@ export interface ProgressionInput {
   stallCount: number
   daysSinceLastSession: number | null
   targetSets: number
+  /** Longer gap since the last session pauses progression (default MAX_GAP_DAYS). */
+  maxGapDays?: number
 }
 
 export interface ProgressionResult {
@@ -35,11 +37,14 @@ export interface ProgressionResult {
   hint: string
 }
 
+/** Usual longest gap between two sessions of a slot before progression pauses. */
+export const MAX_GAP_DAYS = 14
+
 const bestRepsPerSet = (log: ExerciseLogSnapshot): number =>
   Math.max(...log.sets.map((s) => s.reps))
 
 export const evaluateProgression = (input: ProgressionInput): ProgressionResult => {
-  const { slot, lastLog, prevLog, targetSets } = input
+  const { slot, lastLog, prevLog, targetSets, maxGapDays = MAX_GAP_DAYS } = input
   let stallCount = input.stallCount
 
   const startWeight = slot.startWeight ?? 0
@@ -54,13 +59,13 @@ export const evaluateProgression = (input: ProgressionInput): ProgressionResult 
     }
   }
 
-  if (input.daysSinceLastSession !== null && input.daysSinceLastSession > 14) {
+  if (input.daysSinceLastSession !== null && input.daysSinceLastSession > maxGapDays) {
     return {
       status: 'repeat',
       suggestedWeight: lastLog.weight,
       suggestedRepTarget: bestRepsPerSet(lastLog) + 1,
       stallCount: 0,
-      hint: 'Перерва понад 14 днів — повторити без підвищення ваги',
+      hint: `Перерва понад ${maxGapDays} днів — повторити без підвищення ваги`,
     }
   }
 
@@ -150,8 +155,9 @@ export const evaluateProgressionHistory = (input: {
   slot: ProgressionInput['slot']
   history: ProgressionHistoryEntry[]
   today: string
+  maxGapDays?: number
 }): ProgressionResult => {
-  const { slot, history, today } = input
+  const { slot, history, today, maxGapDays } = input
 
   let result = evaluateProgression({
     slot,
@@ -172,6 +178,7 @@ export const evaluateProgressionHistory = (input: {
       stallCount: result.stallCount,
       daysSinceLastSession: daysSince(entry.date, nextDate),
       targetSets: entry.targetSets,
+      maxGapDays,
     })
   }
 
