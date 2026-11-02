@@ -1,54 +1,38 @@
 import type { ExerciseSlot } from '@/lib/db/schema'
 import { MAX_GAP_DAYS } from '@/lib/progression/evaluate'
-import type { SlotHistory } from '@/lib/progression/history'
+import { daysSince } from '@/lib/program/schedule'
+import { formatDateLocal, parseLocalDate } from '@/lib/utils'
 
 /**
- * A rotating slot runs every other session of its workout, so its own sessions
- * are twice as far apart. Rotation groups in the program are pairs.
+ * A rotating slot runs every other week, so its own sessions are twice as far
+ * apart. Rotation groups in the program are pairs.
  */
 export const maxGapDaysFor = (slot: Pick<ExerciseSlot, 'rotationGroup'>): number =>
   slot.rotationGroup ? MAX_GAP_DAYS * 2 : MAX_GAP_DAYS
 
-/** Latest completed session where the slot was actually done (not skipped). */
-const lastDone = (history: SlotHistory, slotId: number) =>
-  (history.get(slotId) ?? []).find((e) => e.logStatus !== 'skipped') ?? null
+/** Monday of the calendar week that contains `date`. */
+const mondayOf = (date: string): string => {
+  const d = parseLocalDate(date)
+  return formatDateLocal(new Date(d.getTime() - ((d.getDay() + 6) % 7) * 86_400_000))
+}
 
 /**
- * Slots a new session of the workout runs, in program order: every slot outside
- * a rotation group, and one slot per group — the one after the member done most
- * recently, or the first member before any of them was done. A skipped
- * exercise doesn't count as done, so it comes up again next time.
+ * Which variant week `date` falls in: 0 or 1, flipping every Monday–Sunday
+ * week counted from the program start. A whole week shares one phase, so A, B
+ * and C of that week pick variants that complement each other.
  */
-export const selectSessionSlots = <T extends Pick<ExerciseSlot, 'id' | 'rotationGroup'>>(
-  slots: T[],
-  history: SlotHistory,
-): T[] => {
-  const groups = new Map<string, T[]>()
-  for (const slot of slots) {
-    if (!slot.rotationGroup) continue
-    const members = groups.get(slot.rotationGroup)
-    if (members) members.push(slot)
-    else groups.set(slot.rotationGroup, [slot])
-  }
-
-  const dueIds = new Set<number>()
-  for (const members of groups.values()) {
-    let latestIndex = -1
-    let latest: { date: string; sessionId: number } | null = null
-    for (const [i, slot] of members.entries()) {
-      const entry = lastDone(history, slot.id)
-      if (!entry) continue
-      if (
-        !latest ||
-        entry.date > latest.date ||
-        (entry.date === latest.date && entry.sessionId > latest.sessionId)
-      ) {
-        latest = entry
-        latestIndex = i
-      }
-    }
-    dueIds.add(members[(latestIndex + 1) % members.length].id)
-  }
-
-  return slots.filter((slot) => !slot.rotationGroup || dueIds.has(slot.id))
+export const getRotationPhase = (programStartDate: string, date: string): 0 | 1 => {
+  const weeks = Math.floor(daysSince(mondayOf(programStartDate), mondayOf(date)) / 7)
+  return weeks % 2 === 0 ? 0 : 1
 }
+
+/**
+ * Slots a session of the workout runs in week phase `phase`, in program order:
+ * every slot outside a rotation group, and the group members of that phase.
+ */
+export const selectSessionSlots = <
+  T extends { rotationGroup?: string | null; rotationPhase?: number | null },
+>(
+  slots: T[],
+  phase: 0 | 1,
+): T[] => slots.filter((slot) => !slot.rotationGroup || slot.rotationPhase === phase)

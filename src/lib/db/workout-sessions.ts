@@ -30,7 +30,7 @@ import {
   getEffectiveSlotParams,
   getWeekContext,
 } from '@/lib/program/week-cycle'
-import { maxGapDaysFor, selectSessionSlots } from '@/lib/program/rotation'
+import { getRotationPhase, maxGapDaysFor, selectSessionSlots } from '@/lib/program/rotation'
 import { getWeekNumber } from '@/lib/program/schedule'
 import { todayInAppTz } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
@@ -209,7 +209,8 @@ export const startWorkoutSession = async (
     })
     .returning()
 
-  const plans = selectSessionSlots(template.slots, history).map((slot, i) => ({
+  const phase = getRotationPhase(settings.programStartDate, today)
+  const plans = selectSessionSlots(template.slots, phase).map((slot, i) => ({
     slot,
     sortOrder: i,
     effective: getEffectiveSlotParams(slot, context),
@@ -630,8 +631,10 @@ export const getHomeExercisePreviews = async (code: WorkoutTemplateCode) => {
   const template = await getTemplateByCode(code)
   if (!template) return []
 
-  const history = await loadTemplateHistory(template.id)
-  return selectSessionSlots(template.slots, history).map((slot) => {
+  const [history, settings] = await Promise.all([loadTemplateHistory(template.id), getSettings()])
+  // The variants a session started today would run.
+  const phase = getRotationPhase(settings.programStartDate, todayInAppTz())
+  return selectSessionSlots(template.slots, phase).map((slot) => {
     const progression = progressionFromHistory(history, slot)
     return {
       name: slot.exercise.name,

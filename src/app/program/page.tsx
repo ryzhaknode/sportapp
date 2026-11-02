@@ -1,13 +1,17 @@
 import { PageMain } from '@/components/layout/page-main'
 import { ProgramEditor } from '@/components/program/program-editor'
 import { getAllTemplates } from '@/lib/db/program'
+import { getSettings } from '@/lib/db/settings'
+import { getRotationPhase } from '@/lib/program/rotation'
 import { DELOAD_WEEKS, EXTRA_SET_WEEKS } from '@/lib/program/week-cycle'
 import { CYCLE_LENGTH_WEEKS, PROGRAM_NAME } from '@/lib/program/seed'
+import { todayInAppTz } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ProgramPage() {
-  const templates = await getAllTemplates()
+  const [templates, settings] = await Promise.all([getAllTemplates(), getSettings()])
+  const rotationPhase = getRotationPhase(settings.programStartDate, todayInAppTz())
 
   return (
     <PageMain>
@@ -23,7 +27,7 @@ export default async function ProgramPage() {
         <p className="mt-2">Розклад: Пн A · Ср B · Пт C</p>
       </section>
 
-      <ProgramEditor templates={templates} />
+      <ProgramEditor templates={templates} rotationPhase={rotationPhase} />
     </PageMain>
   )
 }

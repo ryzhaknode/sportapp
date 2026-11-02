@@ -14,9 +14,11 @@ import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
 
 interface ProgramEditorProps {
   templates: TemplateWithSlots[]
+  /** This week's rotation phase, to mark which variant of a pair runs now. */
+  rotationPhase: 0 | 1
 }
 
-export const ProgramEditor = ({ templates }: ProgramEditorProps) => {
+export const ProgramEditor = ({ templates, rotationPhase }: ProgramEditorProps) => {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -83,6 +85,7 @@ export const ProgramEditor = ({ templates }: ProgramEditorProps) => {
                       .filter((s) => s.rotationGroup === slot.rotationGroup && s.id !== slot.id)
                       .map((s) => `«${s.exercise.name}»`)
                       .join(', ')}
+                    {slot.rotationPhase === rotationPhase ? ' · цього тижня' : ' · наступного тижня'}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">

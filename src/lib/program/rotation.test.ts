@@ -1,68 +1,74 @@
 import { describe, expect, it } from 'vitest'
-import { maxGapDaysFor, selectSessionSlots } from '@/lib/program/rotation'
-import type { SlotHistory, SlotHistoryEntry } from '@/lib/progression/history'
+import { getRotationPhase, maxGapDaysFor, selectSessionSlots } from '@/lib/program/rotation'
+import { SEED_EXERCISES, SEED_WORKOUTS } from '@/lib/program/seed'
 
-const slots = [
-  { id: 1, rotationGroup: null },
-  { id: 2, rotationGroup: 'pull' },
-  { id: 3, rotationGroup: 'pull' },
-  { id: 4, rotationGroup: null },
-  { id: 5, rotationGroup: 'curl' },
-  { id: 6, rotationGroup: 'curl' },
-]
+describe('getRotationPhase', () => {
+  // 2026-09-01 is a Tuesday: weeks run Monday–Sunday regardless of the start day.
+  const start = '2026-09-01'
 
-const entry = (sessionId: number, patch: Partial<SlotHistoryEntry> = {}): SlotHistoryEntry => ({
-  sessionId,
-  date: `2026-10-${String(sessionId).padStart(2, '0')}`,
-  mode: 'normal',
-  logStatus: 'done',
-  suggestedWeight: null,
-  sets: [],
-  ...patch,
+  it('keeps one phase for a whole Monday–Sunday week', () => {
+    expect(getRotationPhase(start, '2026-08-31')).toBe(0)
+    expect(getRotationPhase(start, '2026-09-01')).toBe(0)
+    expect(getRotationPhase(start, '2026-09-06')).toBe(0)
+  })
+
+  it('flips every Monday', () => {
+    expect(getRotationPhase(start, '2026-09-07')).toBe(1)
+    expect(getRotationPhase(start, '2026-09-11')).toBe(1)
+    expect(getRotationPhase(start, '2026-09-14')).toBe(0)
+    // Across the 13-week cycle boundary too (week 13 → week 1 of the next cycle).
+    expect(getRotationPhase(start, '2026-11-23')).toBe(0)
+    expect(getRotationPhase(start, '2026-11-30')).toBe(1)
+  })
 })
 
-const ids = (history: SlotHistory) => selectSessionSlots(slots, history).map((s) => s.id)
-
 describe('selectSessionSlots', () => {
-  it('runs fixed slots and the first member of each group without history', () => {
-    expect(ids(new Map())).toEqual([1, 2, 4, 5])
+  const slots = [
+    { id: 1, rotationGroup: null, rotationPhase: null },
+    { id: 2, rotationGroup: 'pull', rotationPhase: 0 },
+    { id: 3, rotationGroup: 'pull', rotationPhase: 1 },
+    { id: 4, rotationGroup: null, rotationPhase: null },
+  ]
+
+  it('runs fixed slots and the group members of the phase, in order', () => {
+    expect(selectSessionSlots(slots, 0).map((s) => s.id)).toEqual([1, 2, 4])
+    expect(selectSessionSlots(slots, 1).map((s) => s.id)).toEqual([1, 3, 4])
+  })
+})
+
+describe('program rotation', () => {
+  const name = (key: string) => SEED_EXERCISES.find((e) => e.key === key)!.name
+  const week = (phase: 0 | 1) =>
+    Object.fromEntries(
+      SEED_WORKOUTS.map((w) => [
+        w.code,
+        selectSessionSlots(w.slots, phase).map((s) => name(s.exerciseKey)),
+      ]),
+    )
+
+  it('every rotation group has one member per phase', () => {
+    for (const workout of SEED_WORKOUTS) {
+      const groups = new Map<string, number[]>()
+      for (const slot of workout.slots) {
+        if (!slot.rotationGroup) continue
+        groups.set(slot.rotationGroup, [...(groups.get(slot.rotationGroup) ?? []), slot.rotationPhase!])
+      }
+      for (const phases of groups.values()) expect(phases.sort()).toEqual([0, 1])
+    }
   })
 
-  it('switches to the other member after one was done, and back', () => {
-    const afterFirst: SlotHistory = new Map([
-      [2, [entry(1)]],
-      [5, [entry(1)]],
-    ])
-    expect(ids(afterFirst)).toEqual([1, 3, 4, 6])
+  it.each([0, 1] as const)('week phase %i: A and C complement each other', (phase) => {
+    const { A, B, C } = week(phase)
+    const pullupsInA = A.includes(name('pull_weighted'))
+    expect(C.includes(name('lat_pulldown'))).toBe(pullupsInA)
+    expect(A.includes(name('lat_pulldown'))).toBe(!pullupsInA)
 
-    const afterSecond: SlotHistory = new Map([
-      [2, [entry(1)]],
-      [3, [entry(2)]],
-      [5, [entry(1)]],
-      [6, [entry(2)]],
-    ])
-    expect(ids(afterSecond)).toEqual([1, 2, 4, 5])
-  })
+    const barbellCurlInA = A.includes(name('curl'))
+    expect(C.includes(name('cable_curl'))).toBe(barbellCurlInA)
+    expect(C.includes(name('curl'))).toBe(!barbellCurlInA)
 
-  it('repeats a member that was skipped last time', () => {
-    const history: SlotHistory = new Map([
-      [2, [entry(1)]],
-      [3, [entry(2, { logStatus: 'skipped' })]],
-    ])
-    expect(ids(history)).toContain(3)
-  })
-
-  it('orders same-day sessions by id', () => {
-    const history: SlotHistory = new Map([
-      [2, [entry(4, { date: '2026-10-10' })]],
-      [3, [entry(3, { date: '2026-10-10' })]],
-    ])
-    expect(ids(history)).toContain(3)
-  })
-
-  it('treats each group on its own', () => {
-    const history: SlotHistory = new Map([[2, [entry(1)]]])
-    expect(ids(history)).toEqual([1, 3, 4, 5])
+    // One seated cable row a week: in B or in C, never both.
+    expect([B, C].filter((w) => w.includes(name('row_cable')))).toHaveLength(1)
   })
 })
 
