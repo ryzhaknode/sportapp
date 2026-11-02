@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { getSettings } from '@/lib/db/settings'
 import { getTemplateByCode } from '@/lib/db/program'
@@ -31,7 +31,7 @@ import {
   getWeekContext,
 } from '@/lib/program/week-cycle'
 import { getRotationPhase, maxGapDaysFor, selectSessionSlots } from '@/lib/program/rotation'
-import { getWeekNumber } from '@/lib/program/schedule'
+import { getCycleIndex, getProgramCycle } from '@/lib/program/schedule'
 import { todayInAppTz } from '@/lib/utils'
 import type { ProgressionStatus } from '@/lib/program/types'
 import type { WeightType } from '@/lib/program/types'
@@ -137,6 +137,36 @@ export const getProgressionForSlot = async (slotId: number, templateId: number) 
   return progressionFromHistory(await loadTemplateHistory(templateId), slot)
 }
 
+export interface CycleState {
+  /** A sessions completed since the program start: each one opened an A-B-C cycle. */
+  completedA: number
+  /** Code of the latest completed session since the program start. */
+  lastCode: WorkoutTemplateCode | null
+}
+
+/** Where the program stands, counted from the sessions completed since its start date. */
+export const getCycleState = async (programStartDate: string): Promise<CycleState> => {
+  const db = getDb()
+  const rows = await db
+    .select({ code: workoutTemplates.code })
+    .from(workoutSessions)
+    .innerJoin(workoutTemplates, eq(workoutTemplates.id, workoutSessions.workoutTemplateId))
+    .where(
+      and(eq(workoutSessions.status, 'completed'), gte(workoutSessions.date, programStartDate)),
+    )
+    .orderBy(desc(workoutSessions.finishedAt))
+  return {
+    completedA: rows.filter((r) => r.code === 'A').length,
+    lastCode: rows[0]?.code ?? null,
+  }
+}
+
+/** Program cycle (1–13, stored as the session's weekNumber) and rotation phase of a new session. */
+export const getCyclePosition = (state: CycleState, code: WorkoutTemplateCode) => {
+  const cycleIndex = getCycleIndex(code, state.completedA)
+  return { weekNumber: getProgramCycle(cycleIndex), phase: getRotationPhase(cycleIndex) }
+}
+
 export const getTodayCompletedSessionForCode = async (
   code: WorkoutTemplateCode,
 ): Promise<WorkoutSession | null> => {
@@ -192,7 +222,10 @@ export const startWorkoutSession = async (
   if (alreadyToday) {
     throw new Error('WORKOUT_ALREADY_COMPLETED_TODAY')
   }
-  const weekNumber = getWeekNumber(settings.programStartDate, today)
+  const { weekNumber, phase } = getCyclePosition(
+    await getCycleState(settings.programStartDate),
+    code,
+  )
   const context = getWeekContext(weekNumber, settings.tournamentWeekEnabled)
 
   const history = await loadTemplateHistory(template.id)
@@ -209,7 +242,6 @@ export const startWorkoutSession = async (
     })
     .returning()
 
-  const phase = getRotationPhase(settings.programStartDate, today)
   const plans = selectSessionSlots(template.slots, phase).map((slot, i) => ({
     slot,
     sortOrder: i,
@@ -631,9 +663,13 @@ export const getHomeExercisePreviews = async (code: WorkoutTemplateCode) => {
   const template = await getTemplateByCode(code)
   if (!template) return []
 
-  const [history, settings] = await Promise.all([loadTemplateHistory(template.id), getSettings()])
-  // The variants a session started today would run.
-  const phase = getRotationPhase(settings.programStartDate, todayInAppTz())
+  const settings = await getSettings()
+  const [history, state] = await Promise.all([
+    loadTemplateHistory(template.id),
+    getCycleState(settings.programStartDate),
+  ])
+  // The variants a session of this workout started now would run.
+  const { phase } = getCyclePosition(state, code)
   return selectSessionSlots(template.slots, phase).map((slot) => {
     const progression = progressionFromHistory(history, slot)
     return {
@@ -680,7 +716,7 @@ export const getExerciseE1rmPoints = async (
   }
 
   return [...bestByLog.values()].map(({ weekNumber, best }) => ({
-    week: `T${weekNumber}`,
+    week: `Ц${weekNumber}`,
     e1rm: Math.round(best * 10) / 10,
   }))
 }

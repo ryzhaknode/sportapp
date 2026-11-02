@@ -2,6 +2,7 @@ import type { ExerciseSlot, SessionMode } from '@/lib/db/schema'
 import type { WeekContext } from '@/lib/program/types'
 import { CYCLE_LENGTH_WEEKS } from '@/lib/program/seed'
 
+// Program steps 1–13 are A-B-C cycles, not calendar weeks (see schedule.ts).
 export const DELOAD_WEEKS = [7, 13] as const
 export const EXTRA_SET_WEEKS = [8, 9, 10, 11, 12] as const
 

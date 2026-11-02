@@ -22,9 +22,9 @@ export interface SeedSlot {
   extraSetInPhase?: boolean
   twelveWeekTargetMin?: number
   twelveWeekTargetMax?: number
-  /** Slots of a workout sharing a group alternate week by week. */
+  /** Slots of a workout sharing a group alternate cycle by cycle. */
   rotationGroup?: string
-  /** Week phase (0/1) in which the slot runs; set with rotationGroup. */
+  /** Rotation phase (0/1) of the A-B-C cycles the slot runs in; set with rotationGroup. */
   rotationPhase?: number
 }
 
@@ -33,6 +33,7 @@ export interface SeedWorkout {
   slots: SeedSlot[]
 }
 
+/** Program step of a session. "Week" is historical: it is an A-B-C cycle, 1–13. */
 export interface WeekContext {
   weekNumber: number
   mode: SessionMode

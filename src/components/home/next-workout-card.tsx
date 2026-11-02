@@ -24,17 +24,17 @@ interface PreviewExercise {
 
 interface NextWorkoutCardProps {
   code: WorkoutTemplateCode
-  weekNumber: number
+  /** Program cycle (1–13) of A-B-C rounds. */
+  cycleNumber: number
   mode: SessionMode
   exercises: PreviewExercise[]
   continueSessionId: number | null
   todayCompletedSessionId: number | null
-  isScheduledToday: boolean
 }
 
 export const NextWorkoutCard = ({
   code,
-  weekNumber,
+  cycleNumber,
   mode,
   exercises,
   continueSessionId,
@@ -47,7 +47,7 @@ export const NextWorkoutCard = ({
         <Badge variant="outline" className={cn('text-base', WORKOUT_CODE_COLORS[code])}>
           Тренування {code}
         </Badge>
-        <span className="text-sm text-muted-foreground">Тиждень {weekNumber} з 13</span>
+        <span className="text-sm text-muted-foreground">Цикл {cycleNumber} з 13</span>
         <Badge variant="outline" className="text-xs">
           {getModeLabel(mode)}
         </Badge>

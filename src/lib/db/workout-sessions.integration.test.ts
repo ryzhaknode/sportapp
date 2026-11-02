@@ -27,6 +27,8 @@ import {
   completeSet,
   type ExerciseLogRow,
   finishWorkoutSession,
+  getCyclePosition,
+  getCycleState,
   getHomeExercisePreviews,
   isSessionStale,
   loadSessionDetail,
@@ -37,7 +39,7 @@ import {
   startWorkoutSession,
 } from '@/lib/db/workout-sessions'
 import { getSettings } from '@/lib/db/settings'
-import { getRotationPhase, selectSessionSlots } from '@/lib/program/rotation'
+import { selectSessionSlots } from '@/lib/program/rotation'
 import { getEffectiveSlotParams, getWeekContext } from '@/lib/program/week-cycle'
 import { decreaseWeight, roundToIncrement } from '@/lib/progression/weight'
 
@@ -58,16 +60,31 @@ const advanceDays = (days: number) => {
   vi.setSystemTime(Date.now() + days * DAY_MS)
 }
 
+const PROGRAM_START = '2025-01-01'
+
 /**
- * Puts "today" in the given cycle week. The start date sits 3 days into the
- * week so a ±1 day difference in how "today" is computed keeps the same week.
+ * Puts the next A session in the given program cycle: a cycle opens with A, so
+ * tops completed A sessions since the program start up to `cycle - 1` with
+ * empty past ones (they have no logs, so no history).
  */
-const setProgramWeek = async (week: number) => {
-  const start = new Date(Date.now() - ((week - 1) * 7 + 3) * DAY_MS)
-  await getDb()
+const setProgramCycle = async (cycle: number) => {
+  const db = getDb()
+  await db
     .update(settings)
-    .set({ programStartDate: start.toISOString().slice(0, 10), tournamentWeekEnabled: false })
+    .set({ programStartDate: PROGRAM_START, tournamentWeekEnabled: false })
     .where(eq(settings.id, 1))
+  const { completedA } = await getCycleState(PROGRAM_START)
+  for (let i = completedA; i < cycle - 1; i += 1) {
+    await db.insert(workoutSessions).values({
+      workoutTemplateId: templateA.id,
+      date: '2025-01-02',
+      startedAt: '2025-01-02T08:00:00.000Z',
+      finishedAt: `2025-01-02T09:${String(i).padStart(2, '0')}:00.000Z`,
+      weekNumber: 1,
+      mode: 'normal',
+      status: 'completed',
+    })
+  }
 }
 
 const loadDetail = async (sessionId: number) => {
@@ -96,10 +113,11 @@ const runSession = async (
   return sessionId
 }
 
-/** Slots a session of A started today runs: fixed ones plus this week's rotation variants. */
+/** Slots a session of A started now runs: fixed ones plus this cycle's rotation variants. */
 const dueSlotsA = async () => {
   const { programStartDate } = await getSettings()
-  return selectSessionSlots(templateA.slots, getRotationPhase(programStartDate, today()))
+  const { phase } = getCyclePosition(await getCycleState(programStartDate), 'A')
+  return selectSessionSlots(templateA.slots, phase)
 }
 
 const startWeightOf = (ex: ExerciseLogRow): number => ex.slot.startWeight ?? 0
@@ -137,7 +155,7 @@ beforeEach(async () => {
   for (const table of [setLogs, exerciseLogs, workoutSessions, progressionState, restTimers, bodyWeightLogs]) {
     await db.delete(table)
   }
-  await setProgramWeek(1)
+  await setProgramCycle(1)
 })
 
 describe('startWorkoutSession', () => {
@@ -189,7 +207,7 @@ describe('startWorkoutSession', () => {
     { week: 8, mode: 'normal' },
     { week: 13, mode: 'test' },
   ] as const)('week $week → $mode session with the effective set count', async ({ week, mode }) => {
-    await setProgramWeek(week)
+    await setProgramCycle(week)
     const detail = await loadDetail(await startWorkoutSession('A', 80))
 
     expect(detail.session).toMatchObject({ weekNumber: week, mode })
@@ -218,6 +236,8 @@ describe('startWorkoutSession', () => {
 
 describe('completeSet / finishWorkoutSession', () => {
   it('refuses to finish with pending sets, then completes and caches progression', async () => {
+    // Before finishing: a completed A moves the program on to the next cycle.
+    const dueIds = (await dueSlotsA()).map((s) => s.id)
     const sessionId = await startWorkoutSession('A', 80)
     let detail = await loadDetail(sessionId)
     const totalSets = detail.exercises.reduce((n, e) => n + e.sets.length, 0)
@@ -266,7 +286,6 @@ describe('completeSet / finishWorkoutSession', () => {
     expect(await getDb().select().from(restTimers)).toHaveLength(0)
 
     const rows = await progressionRows()
-    const dueIds = (await dueSlotsA()).map((s) => s.id)
     expect(rows.map((r) => r.exerciseSlotId)).toEqual(dueIds.sort((a, b) => a - b))
     const squat = rows.find((r) => r.exerciseSlotId === first.exerciseSlotId)!
     // A single session has no previous one to compare → add_reps at the same weight.
@@ -350,7 +369,7 @@ describe('progression across sessions', () => {
     const before = await getHomeExercisePreviews('A')
     const stateBefore = await progressionRows()
 
-    await setProgramWeek(7)
+    await setProgramCycle(7)
     const deloadId = await runSession('A', (ex) => ({
       weight: startWeightOf(ex) + 10,
       reps: ex.repMax,
@@ -368,12 +387,11 @@ describe('progression across sessions', () => {
 })
 
 describe('rotating exercises', () => {
-  it('alternate week by week, each with its own progression', async () => {
-    // BASE_TIME is a Monday, so +7 days is the next rotation week.
-    const firstWeek = await dueSlotsA()
+  it('alternate cycle by cycle, each with its own progression', async () => {
+    const firstCycle = await dueSlotsA()
     const rotating = templateA.slots.filter((s) => s.rotationGroup)
-    const thisWeek = rotating.filter((s) => firstWeek.includes(s))
-    const otherWeek = rotating.filter((s) => !firstWeek.includes(s))
+    const thisWeek = rotating.filter((s) => firstCycle.includes(s))
+    const otherWeek = rotating.filter((s) => !firstCycle.includes(s))
     expect(thisWeek.length).toBeGreaterThan(0)
     expect(otherWeek).toHaveLength(thisWeek.length)
 
@@ -385,7 +403,7 @@ describe('rotating exercises', () => {
     await runSession('A', atRepMax)
     advanceDays(5)
 
-    // Next week: the other variants take the same places, fresh.
+    // Next A opens the next cycle: the other variants take the same places, fresh.
     const secondId = await startWorkoutSession('A', 80)
     const second = await loadDetail(secondId)
     const slotIds = second.exercises.map((e) => e.exerciseSlotId)
@@ -393,7 +411,7 @@ describe('rotating exercises', () => {
       expect(slotIds).not.toContain(slot.id)
       const partner = otherWeek.find((s) => s.rotationGroup === slot.rotationGroup)!
       const ex = second.exercises.find((e) => e.exerciseSlotId === partner.id)!
-      expect(ex.sortOrder).toBe(firstWeek.indexOf(slot))
+      expect(ex.sortOrder).toBe(firstCycle.indexOf(slot))
       expect(ex).toMatchObject({ suggestedStatus: 'first', suggestedWeight: partner.startWeight })
     }
     for (const ex of second.exercises) {
@@ -401,11 +419,11 @@ describe('rotating exercises', () => {
     }
     expect(await finishWorkoutSession(secondId)).toEqual({ ok: true, sessionId: secondId })
 
-    // A missed week later (28 days after the first session) the first variants
+    // The cycle after that, 28 days after the first session, the first variants
     // are back and still progress: the 14-day break rule is doubled for them.
     advanceDays(21)
     const third = await loadDetail(await startWorkoutSession('A', 80))
-    expect(third.exercises.map((e) => e.exerciseSlotId)).toEqual(firstWeek.map((s) => s.id))
+    expect(third.exercises.map((e) => e.exerciseSlotId)).toEqual(firstCycle.map((s) => s.id))
     for (const slot of thisWeek) {
       const ex = third.exercises.find((e) => e.exerciseSlotId === slot.id)!
       expect(ex.suggestedStatus).toBe('increase_weight')
@@ -413,6 +431,20 @@ describe('rotating exercises', () => {
         roundToIncrement((slot.startWeight ?? 20) + slot.increment, slot.increment),
       )
     }
+  })
+
+  it('B and C follow the cycle opened by A, not the calendar', async () => {
+    expect(await getCycleState(PROGRAM_START)).toEqual({ completedA: 0, lastCode: null })
+    const firstA = await dueSlotsA()
+    await runSession('A', (ex) => ({ weight: startWeightOf(ex), reps: ex.repMin, rir: ex.rirMin }))
+    expect(await getCycleState(PROGRAM_START)).toEqual({ completedA: 1, lastCode: 'A' })
+
+    // Weeks later C still belongs to that cycle: pull-ups in A → lat pulldown in C.
+    advanceDays(30)
+    const pullupsInA = firstA.some((s) => s.exercise.name === 'Підтягування з вагою')
+    const c = (await getHomeExercisePreviews('C')).map((p) => p.name)
+    expect(c.includes('Тяга верхнього блоку')).toBe(pullupsInA)
+    expect(c.includes('Тяга горизонтального блоку сидячи')).toBe(!pullupsInA)
   })
 })
 

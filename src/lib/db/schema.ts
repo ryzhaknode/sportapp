@@ -53,9 +53,9 @@ export const exerciseSlots = sqliteTable('exercise_slots', {
   twelveWeekTargetMin: real('twelve_week_target_min'),
   twelveWeekTargetMax: real('twelve_week_target_max'),
   targetReps: integer('target_reps').default(6),
-  /** Slots of one template with the same group take turns, one of them per week. */
+  /** Slots of one template with the same group take turns, one of them per A-B-C cycle. */
   rotationGroup: text('rotation_group'),
-  /** Week phase (0/1, see getRotationPhase) in which a rotating slot runs. */
+  /** Rotation phase (0/1, see getRotationPhase) of the A-B-C cycles a rotating slot runs in. */
   rotationPhase: integer('rotation_phase'),
   /** Removed from the program; kept so past logs still resolve their exercise. */
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
@@ -67,6 +67,7 @@ export const workoutSessions = sqliteTable('workout_sessions', {
   date: text('date').notNull(),
   startedAt: text('started_at').notNull(),
   finishedAt: text('finished_at'),
+  /** Program cycle 1–13 (an A-B-C round, not a calendar week; the name is historical). */
   weekNumber: integer('week_number').notNull(),
   mode: text('mode', { enum: ['normal', 'deload', 'tournament', 'test'] }).notNull(),
   status: text('status', { enum: ['in_progress', 'completed', 'abandoned'] }).notNull(),

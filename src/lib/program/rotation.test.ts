@@ -3,22 +3,8 @@ import { getRotationPhase, maxGapDaysFor, selectSessionSlots } from '@/lib/progr
 import { SEED_EXERCISES, SEED_WORKOUTS } from '@/lib/program/seed'
 
 describe('getRotationPhase', () => {
-  // 2026-09-01 is a Tuesday: weeks run Monday–Sunday regardless of the start day.
-  const start = '2026-09-01'
-
-  it('keeps one phase for a whole Monday–Sunday week', () => {
-    expect(getRotationPhase(start, '2026-08-31')).toBe(0)
-    expect(getRotationPhase(start, '2026-09-01')).toBe(0)
-    expect(getRotationPhase(start, '2026-09-06')).toBe(0)
-  })
-
-  it('flips every Monday', () => {
-    expect(getRotationPhase(start, '2026-09-07')).toBe(1)
-    expect(getRotationPhase(start, '2026-09-11')).toBe(1)
-    expect(getRotationPhase(start, '2026-09-14')).toBe(0)
-    // Across the 13-week cycle boundary too (week 13 → week 1 of the next cycle).
-    expect(getRotationPhase(start, '2026-11-23')).toBe(0)
-    expect(getRotationPhase(start, '2026-11-30')).toBe(1)
+  it('flips every A-B-C cycle', () => {
+    expect([0, 1, 2, 3, 12, 13].map(getRotationPhase)).toEqual([0, 1, 0, 1, 0, 1])
   })
 })
 
@@ -57,7 +43,7 @@ describe('program rotation', () => {
     }
   })
 
-  it.each([0, 1] as const)('week phase %i: A and C complement each other', (phase) => {
+  it.each([0, 1] as const)('rotation phase %i: A and C complement each other', (phase) => {
     const { A, B, C } = week(phase)
     const pullupsInA = A.includes(name('pull_weighted'))
     expect(C.includes(name('lat_pulldown'))).toBe(pullupsInA)
@@ -67,7 +53,7 @@ describe('program rotation', () => {
     expect(C.includes(name('cable_curl'))).toBe(barbellCurlInA)
     expect(C.includes(name('curl'))).toBe(!barbellCurlInA)
 
-    // One seated cable row a week: in B or in C, never both.
+    // One seated cable row a cycle: in B or in C, never both.
     expect([B, C].filter((w) => w.includes(name('row_cable')))).toHaveLength(1)
   })
 })

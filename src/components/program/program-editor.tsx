@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { TemplateWithSlots } from '@/lib/db/program'
+import type { WorkoutTemplateCode } from '@/lib/db/schema'
 import { WORKOUT_CODE_COLORS } from '@/lib/program/types'
 import { cn } from '@/lib/utils'
 import { formatDuration } from '@/lib/utils'
@@ -14,11 +15,11 @@ import { ACTION_ERROR_MESSAGE } from '@/lib/action-error'
 
 interface ProgramEditorProps {
   templates: TemplateWithSlots[]
-  /** This week's rotation phase, to mark which variant of a pair runs now. */
-  rotationPhase: 0 | 1
+  /** Rotation phase of each workout's next session, to mark which variant of a pair runs then. */
+  nextPhase: Record<WorkoutTemplateCode, 0 | 1>
 }
 
-export const ProgramEditor = ({ templates, rotationPhase }: ProgramEditorProps) => {
+export const ProgramEditor = ({ templates, nextPhase }: ProgramEditorProps) => {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -85,7 +86,7 @@ export const ProgramEditor = ({ templates, rotationPhase }: ProgramEditorProps) 
                       .filter((s) => s.rotationGroup === slot.rotationGroup && s.id !== slot.id)
                       .map((s) => `«${s.exercise.name}»`)
                       .join(', ')}
-                    {slot.rotationPhase === rotationPhase ? ' · цього тижня' : ' · наступного тижня'}
+                    {slot.rotationPhase === nextPhase[tpl.code] ? ' · наступного разу' : ' · через раз'}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
