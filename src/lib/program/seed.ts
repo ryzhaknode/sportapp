@@ -67,17 +67,21 @@ export const SEED_EXERCISES: SeedExercise[] = [
 ]
 
 /**
- * Pairs `slot` with an alternative exercise: the two take turns session by
- * session with the same sets/reps/RIR/rest. The alternative has its own
- * progression, so it starts without a weight and has no 12-week target.
+ * Pairs `slot` with an alternative exercise: the two take turns week by week
+ * with the same sets/reps/RIR/rest — `slot` in week phase `phase`, the
+ * alternative in the other one. Phases are chosen across A/B/C so a week never
+ * repeats a variant: e.g. weighted pull-ups in A go with the lat pulldown in C.
+ * The alternative has its own progression, so it starts without a weight and
+ * has no 12-week target.
  */
 const withAlternative = (
   slot: SeedSlot,
   rotationGroup: string,
   exerciseKey: string,
   increment: number,
+  phase: 0 | 1,
 ): SeedSlot[] => [
-  { ...slot, rotationGroup },
+  { ...slot, rotationGroup, rotationPhase: phase },
   {
     ...slot,
     exerciseKey,
@@ -86,6 +90,7 @@ const withAlternative = (
     twelveWeekTargetMin: undefined,
     twelveWeekTargetMax: undefined,
     rotationGroup,
+    rotationPhase: 1 - phase,
   },
 ]
 
@@ -138,6 +143,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         'vertical_pull',
         'lat_pulldown',
         1,
+        0,
       ),
       {
         exerciseKey: 'lateral_raise',
@@ -167,6 +173,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         'curl',
         'cable_curl',
         1,
+        0,
       ),
     ],
   },
@@ -200,6 +207,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         'chest_press',
         'chest_press_machine',
         2.5,
+        0,
       ),
       ...withAlternative(
         {
@@ -217,6 +225,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         'row',
         'lat_pulldown',
         1,
+        0,
       ),
       ...withAlternative(
         {
@@ -235,6 +244,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         'shoulder_press',
         'shoulder_press_machine',
         2.5,
+        0,
       ),
       {
         exerciseKey: 'triceps_oh',
@@ -291,6 +301,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         'row',
         'lat_pulldown',
         1,
+        1,
       ),
       {
         exerciseKey: 'lateral_raise',
@@ -317,6 +328,7 @@ export const SEED_WORKOUTS: SeedWorkout[] = [
         },
         'curl',
         'cable_curl',
+        1,
         1,
       ),
       {

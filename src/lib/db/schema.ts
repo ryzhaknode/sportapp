@@ -53,8 +53,10 @@ export const exerciseSlots = sqliteTable('exercise_slots', {
   twelveWeekTargetMin: real('twelve_week_target_min'),
   twelveWeekTargetMax: real('twelve_week_target_max'),
   targetReps: integer('target_reps').default(6),
-  /** Slots of one template with the same group take turns: one of them per session. */
+  /** Slots of one template with the same group take turns, one of them per week. */
   rotationGroup: text('rotation_group'),
+  /** Week phase (0/1, see getRotationPhase) in which a rotating slot runs. */
+  rotationPhase: integer('rotation_phase'),
   /** Removed from the program; kept so past logs still resolve their exercise. */
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 })
